@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── UI_REDESIGN — 石墨夜色 Design Tokens ─────────────────────── */
+@layer base {
+  :root {
+    /* Base colors */
+    --background: 0 0% 7%;
+    --sidebar: 0 0% 0%;
+    --elevated: 0 0% 10%;
+    --elevated-hover: 0 0% 14%;
+
+    /* Borders */
+    --border: 0 0% 100% / 8%;
+
+    /* Text */
+    --foreground: 0 0% 100%;
+    --muted-foreground: 0 0% 65%;
+    --faint-foreground: 0 0% 42%;
+
+    /* Primary accent (Spotify-style green) */
+    --primary: 141 73% 42%;
+    --primary-hover: 141 80% 50%;
+
+    /* Table striping */
+    --table-even: 0 0% 7%;
+    --table-odd: 0 0% 100% / 2%;
+
+    /* Overlay */
+    --overlay: 0 0% 0% / 50%;
+
+    /* Radius tokens */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-full: 9999px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}

@@ -3,11 +3,18 @@ name = "caw"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "caw_lib"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
-# GUI framework
-eframe = "0.34"
-egui = "0.34"
-egui_material_icons = "0.6"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # Audio decoding
 symphonia = { version = "0.5", features = ["all-codecs", "all-formats"] }
@@ -20,4 +27,3 @@ anyhow = "1"
 crossbeam-channel = "0.5"
 walkdir = "2"
 dirs = "5"
-image = "0.25"

@@ -35,17 +35,17 @@ fn read_tags_from_revision(
         match tag.std_key {
             Some(symphonia::core::meta::StandardTagKey::TrackTitle) => {
                 if title.is_empty() {
-                    *title = tag.value.to_string();
+                    *title = fix_mojibake(tag.value.to_string());
                 }
             }
             Some(symphonia::core::meta::StandardTagKey::Artist) => {
                 if artist.is_empty() {
-                    *artist = tag.value.to_string();
+                    *artist = fix_mojibake(tag.value.to_string());
                 }
             }
             Some(symphonia::core::meta::StandardTagKey::Album) => {
                 if album.is_empty() {
-                    *album = tag.value.to_string();
+                    *album = fix_mojibake(tag.value.to_string());
                 }
             }
             Some(symphonia::core::meta::StandardTagKey::TrackNumber) => {
@@ -62,6 +62,47 @@ fn read_tags_from_revision(
             *cover_data = Some(Arc::new(visual.data.to_vec()));
         }
     }
+}
+
+/// Detect and repair double-mojibake from GBK-encoded tags.
+///
+/// Some rippers (mostly Chinese) store GBK bytes in FLAC Vorbis comments / ID3
+/// tags instead of the UTF-8 required by the spec. Symphonia then reads those
+/// bytes byte-by-byte as Latin-1 and packs them into a Rust `String` via UTF-8,
+/// producing a *double* mojibake: e.g. GBK `c4 e3 ...` (你以为我是谁) becomes
+/// the UTF-8 encoding of `ÄãÒÔÎªÎÒÊÇË` (`c3 84 c3 a3 ...`).
+///
+/// Heuristic (only touches suspicious strings; clean ASCII / valid UTF-8 CJK /
+/// real Latin-1 text is left untouched):
+///   1. All-ASCII  -> return as-is (fast path for the common case).
+///   2. Any char >= U+00FF -> it's genuine UTF-8 (real CJK or extended Latin);
+///      return as-is. (Mojibake can never produce chars above U+00FF because
+///      each original byte maps to exactly one Latin-1 code point.)
+///   3. Otherwise the string lives entirely in 0x00-0xFF and contains high
+///      bytes -> likely mojibake. Reverse the UTF-8 encoding to recover the
+///      original bytes, decode as GBK; if it yields valid text with CJK,
+///      use it, else fall back to the original.
+fn fix_mojibake(s: String) -> String {
+    // 1. Pure ASCII fast path.
+    if s.is_ascii() {
+        return s;
+    }
+    // 2. Genuine UTF-8 with characters above the Latin-1 range.
+    if s.chars().any(|c| c as u32 >= 0x100) {
+        return s;
+    }
+    // 3. Suspected mojibake: each char's code point is one original byte.
+    let raw: Vec<u8> = s.chars().map(|c| c as u8).collect();
+    let (decoded, _, had_errors) = encoding_rs::GBK.decode(&raw);
+    if had_errors {
+        return s;
+    }
+    // Only accept if the result actually contains CJK (avoid mangling real
+    // Latin-1 text like français).
+    if decoded.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c)) {
+        return decoded.into_owned();
+    }
+    s
 }
 
 /// Extract metadata from an audio file, returning an `Arc<Track>`.

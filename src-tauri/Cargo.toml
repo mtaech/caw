@@ -38,6 +38,11 @@ crossbeam-channel = "0.5"
 walkdir = "2"
 dirs = "5"
 
+# Encoding: fix GBK-mojibake tags (some FLAC/MP3 rippers store GBK bytes instead
+# of the UTF-8 required by Vorbis/ID3v2; Symphonia reads them byte-by-byte as
+# Latin-1, producing double-mojibake like ÄãÒÔÎªÎÒÊÇË for 你以为我是谁).
+encoding_rs = "0.8"
+
 # Speed up heavy CPU-bound deps under `cargo tauri dev` (debug).
 # Symphonia's decode loop is unoptimized in debug and ~30x slower than release
 # (~4s/song vs ~130ms), causing large playback start latency during development.

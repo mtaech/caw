@@ -458,6 +458,7 @@ dependencies = [
  "cpal",
  "crossbeam-channel",
  "dirs 5.0.1",
+ "encoding_rs",
  "rusqlite",
  "serde",
  "serde_json",

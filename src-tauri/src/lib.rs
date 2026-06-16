@@ -37,8 +37,15 @@ fn greet(name: &str) -> String {
 }
 
 /// Open a native folder picker, persist the choice, and start scanning.
+///
+/// MUST be `async` + `blocking_pick_folder()`: a sync command runs on the main
+/// thread, and `blocking_*` does `rx.recv()` on a rendezvous channel whose
+/// callback must run on the main thread's event loop (GTK). Calling it from the
+/// main thread deadlocks — the window freezes and the dialog never appears.
+/// An `async` command runs on a worker thread, leaving the main thread free to
+/// pump the dialog loop. (See tauri-plugin-dialog `blocking_*` docs.)
 #[tauri::command]
-fn pick_music_folder(app: AppHandle, state: tauri::State<CawState>) -> Result<Option<String>, String> {
+async fn pick_music_folder(app: AppHandle, state: tauri::State<'_, CawState>) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let picked = app

@@ -193,6 +193,11 @@ function openDir(path: string) {
 function goUp() {
   if (!props.currentPath) return;
   const normalized = props.currentPath.replace(/\/+$/, "");
+  // If at a configured music root, go back to root view
+  if (musicRoots.value.some((r) => r.replace(/\/+$/, "") === normalized)) {
+    emit("navigate", null);
+    return;
+  }
   if (normalized === "" || normalized === "/") {
     emit("navigate", null);
     return;

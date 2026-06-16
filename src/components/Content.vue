@@ -21,7 +21,7 @@
     </div>
 
     <!-- Content area -->
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-hidden">
       <!-- Playlist detail (takes precedence when a playlist is open) -->
       <PlaylistDetail v-if="showPlaylistDetail" />
 

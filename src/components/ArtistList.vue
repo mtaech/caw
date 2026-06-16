@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6">
+  <div class="p-6 overflow-y-auto h-full">
     <div class="grid gap-3"
       :style="{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }"
     >

@@ -42,6 +42,7 @@ dirs = "5"
 # of the UTF-8 required by Vorbis/ID3v2; Symphonia reads them byte-by-byte as
 # Latin-1, producing double-mojibake like ÄãÒÔÎªÎÒÊÇË for 你以为我是谁).
 encoding_rs = "0.8"
+image = "0.25"
 
 # Speed up heavy CPU-bound deps under `cargo tauri dev` (debug).
 # Symphonia's decode loop is unoptimized in debug and ~30x slower than release

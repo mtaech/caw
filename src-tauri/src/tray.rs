@@ -33,8 +33,13 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .item(&quit)
         .build()?;
 
-    let icon = app.default_window_icon().cloned()
-        .ok_or_else(|| "no embedded window icon — tray not available")?;
+    // Load and decode the tray icon from the embedded 32x32 PNG.
+    let icon_bytes = include_bytes!("../icons/32x32.png");
+    let img = image::load_from_memory(icon_bytes)
+        .map_err(|e| format!("failed to decode tray icon: {e}"))?
+        .into_rgba8();
+    let (w, h) = img.dimensions();
+    let icon = tauri::image::Image::new_owned(img.into_raw(), w, h);
     let _tray = TrayIconBuilder::new()
         .icon(icon)
         .tooltip("Caw")

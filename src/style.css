@@ -2,30 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── UI_REDESIGN — 石墨夜色 Design Tokens ─────────────────────── */
+/* ── Light Theme — Design Tokens ──────────────────────────────────── */
+/* 亮色主题：亮背景 + 微灰分层 + 深绿 primary（白底下对比度达 WCAG AA） */
 @layer base {
   :root {
     /* Base colors */
-    --background: 0 0% 7%;
-    --sidebar: 0 0% 0%;
-    --elevated: 0 0% 10%;
-    --elevated-hover: 0 0% 14%;
+    --background: 0 0% 100%;        /* #ffffff 主背景 */
+    --sidebar: 240 5% 96%;          /* #f5f5f7 侧栏（微灰分层） */
+    --elevated: 0 0% 98%;           /* #fafafa 卡片/表头/悬浮面 */
+    --elevated-hover: 240 5% 93%;   /* #ededf1 行 hover / 按钮 hover */
 
     /* Borders */
-    --border: 0 0% 100% / 8%;
+    --border: 240 6% 90%;           /* #e4e4e7 分割线 */
 
     /* Text */
-    --foreground: 0 0% 100%;
-    --muted-foreground: 0 0% 65%;
-    --faint-foreground: 0 0% 42%;
+    --foreground: 0 0% 12%;         /* #1f1f1f 主文字 */
+    --muted-foreground: 240 4% 35%; /* #56565c 次文字 */
+    --faint-foreground: 240 4% 60%; /* #9999a0 最弱文字 */
 
-    /* Primary accent (Spotify-style green) */
-    --primary: 141 73% 42%;
-    --primary-hover: 141 80% 50%;
+    /* Primary accent — 绿色调深，白底下对比度达 WCAG AA 4.5:1 */
+    --primary: 142 64% 30%;         /* #1b7937 */
+    --primary-hover: 142 64% 24%;   /* #155e2c hover 更深 */
 
-    /* Table striping */
-    --table-even: 0 0% 7%;
-    --table-odd: 0 0% 100% / 2%;
+    /* Table striping — 亮底下用极淡灰条纹 */
+    --table-even: 0 0% 100%;        /* = background */
+    --table-odd: 240 6% 97%;        /* #f8f8f9 极淡灰条纹 */
 
     /* Overlay */
     --overlay: 0 0% 0% / 50%;

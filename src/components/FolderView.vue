@@ -119,21 +119,25 @@ const allDirEntries = computed(() => {
  * When currentPath is null, returns top-level dirs (e.g. "/home", "/media").
  */
 const subDirs = computed(() => {
-  const prefix = props.currentPath ?? "";
-  // Normalize: ensure prefix doesn't end with / (except root "/")
-  const normalized = prefix === "/" ? "/" : prefix.replace(/\/+$/, "");
-  const prefixSlash = normalized === "" ? "" : normalized + "/";
-
+  const prefix = props.currentPath;
+  if (prefix === null || prefix === "/") {
+    // Root level: extract top-level directory names from each entry
+    const top = new Set<string>();
+    for (const dir of allDirEntries.value) {
+      // dir is like "/home", "/home/user/Music", "/media"
+      const parts = dir.replace(/^\/+/, "").split("/"); // ["home",...] or ["media",...]
+      if (parts.length > 0 && parts[0]) top.add("/" + parts[0]);
+    }
+    return Array.from(top).sort();
+  }
+  const prefixSlash = prefix.replace(/\/+$/, "") + "/";
   const children = new Set<string>();
   for (const dir of allDirEntries.value) {
-    // Skip if outside our prefix
-    if (!dir.startsWith(prefixSlash)) continue;
-    if (dir === normalized) continue;
-    // Get the next path segment
+    if (!dir.startsWith(prefixSlash) || dir === prefix.replace(/\/+$/, "")) continue;
     const rest = dir.slice(prefixSlash.length);
     const slashIdx = rest.indexOf("/");
     const child = slashIdx === -1 ? rest : rest.slice(0, slashIdx);
-    if (child) children.add(normalized ? normalized + "/" + child : child);
+    if (child) children.add(prefixSlash + child);
   }
   return Array.from(children).sort();
 });
@@ -143,12 +147,13 @@ const subDirs = computed(() => {
  */
 const folderTracks = computed(() => {
   const prefix = props.currentPath;
-  const prefixSlash = prefix === null ? "" : (prefix === "/" ? "/" : prefix + "/");
+  const prefixSlash = prefix === null ? null : (prefix === "/" ? "/" : prefix + "/");
   return playback.library
     .filter((t) => {
-      const d = t.path.substring(0, t.path.lastIndexOf("/") + 1);
-      if (prefix === null) return d === "" || d === "/";
-      return prefixSlash === "" ? d === "" : d.startsWith(prefixSlash) && d.lastIndexOf("/", d.length - 2) === prefixSlash.length - 1;
+      const parentDir = t.path.substring(0, t.path.lastIndexOf("/") + 1);
+      // At root: no tracks directly at the filesystem root
+      if (prefix === null || prefix === "/") return false;
+      return parentDir === prefixSlash;
     })
     .sort((a, b) => a.track_number - b.track_number || a.title.localeCompare(b.title));
 });
@@ -165,6 +170,10 @@ function openDir(path: string) {
 function goUp() {
   if (!props.currentPath) return;
   const normalized = props.currentPath.replace(/\/+$/, "");
+  if (normalized === "" || normalized === "/") {
+    emit("navigate", null);
+    return;
+  }
   const slashIdx = normalized.lastIndexOf("/");
   if (slashIdx <= 0) {
     emit("navigate", "/");

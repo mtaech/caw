@@ -34,7 +34,7 @@
       <TrackTable v-else-if="view.nav === 'all-music'" />
       <ArtistList v-else-if="view.nav === 'artists'" />
       <Placeholder v-else-if="view.nav === 'playlists'" title="播放列表" desc="在侧栏创建或选择一个播放列表" icon-type="playlists" />
-      <Placeholder v-else-if="view.nav === 'folders'" title="文件夹浏览" desc="即将推出" icon-type="folders" />
+      <FolderView v-else-if="view.nav === 'folders'" :currentPath="currentFolderPath" @navigate="currentFolderPath = $event" />
       <Settings v-else-if="view.nav === 'settings'" />
       <div v-else class="flex-1 flex items-center justify-center">
         <p class="text-muted-foreground">请选择一个视图</p>
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { Search, X } from "lucide-vue-next";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
@@ -57,6 +57,7 @@ import ArtistList from "@/components/ArtistList.vue";
 import PlaylistDetail from "@/components/PlaylistDetail.vue";
 import Placeholder from "@/components/Placeholder.vue";
 import Settings from "@/components/Settings.vue";
+import FolderView from "@/components/FolderView.vue";
 
 const view = useViewStore();
 const plStore = usePlaylistStore();
@@ -64,4 +65,12 @@ const plStore = usePlaylistStore();
 const showPlaylistDetail = computed(
   () => view.nav === "playlists" && plStore.currentPlaylistId !== null,
 );
+
+// Folder browser navigation state
+const currentFolderPath = ref<string | null>(null);
+
+// Reset folder path when navigating away from folders
+watch(() => view.nav, () => {
+  if (view.nav !== "folders") currentFolderPath.value = null;
+});
 </script>

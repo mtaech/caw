@@ -23,3 +23,12 @@ A filesystem path where music files are stored. Multiple directories are
 supported; the library is built by scanning all configured directories and
 deduplicating by file path.
 _Avoid_: Folder path, library path
+
+**Tauri v2 command parameter naming**:
+`#[tauri::command]` defaults to **camelCase** for IPC JSON keys
+(`ArgumentCase::Camel` in tauri-macros). Rust function params like
+`playlist_id: i64` expect `{ playlistId: ... }` from the frontend
+`invoke()`, NOT `{ playlist_id: ... }`. Single-word params (`id`,
+`name`, `path`) are unaffected because snake_case and camelCase
+happen to be identical.
+_Avoid_: Sending snake_case keys for multi-word parameters.

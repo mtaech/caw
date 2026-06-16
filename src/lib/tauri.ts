@@ -1,11 +1,11 @@
 /**
  * Typed Tauri invoke/listen wrappers.
- * Filled in as commands are added in P1+.
+ * Every backend command has a corresponding async function here.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-// ── Payload types ──────────────────────────────────────────────────
+// ── Payload shapes ─────────────────────────────────────────────────
 
 export interface TrackDto {
   id: number;
@@ -26,34 +26,112 @@ export interface PlayerStateDto {
   volume: number;
   shuffle: boolean;
   repeat: string;
+  queue: number[];
 }
 
-// ── Commands ───────────────────────────────────────────────────────
+export interface PositionPayload {
+  current: number;
+  total: number;
+  is_playing: boolean;
+  track_id: number | null;
+}
+
+// ─── Commands ──────────────────────────────────────────────────────
 
 export async function getLibrary(): Promise<TrackDto[]> {
   return invoke<TrackDto[]>("get_library");
 }
 
-// ── Events ─────────────────────────────────────────────────────────
-
-export function onPositionUpdate(
-  callback: (payload: { current: number; total: number }) => void,
-): Promise<UnlistenFn> {
-  return listen<{ current: number; total: number }>("position", (event) => {
-    callback(event.payload);
-  });
+export async function getCover(id: number): Promise<number[] | null> {
+  return invoke<number[] | null>("get_cover", { id });
 }
 
-export function onLibraryUpdated(
-  callback: () => void,
+export async function getState(): Promise<PlayerStateDto> {
+  return invoke<PlayerStateDto>("get_state");
+}
+
+export async function playTracks(ids: number[], startId: number): Promise<void> {
+  return invoke<void>("play_tracks", { ids, startId });
+}
+
+export async function togglePlay(): Promise<void> {
+  return invoke<void>("toggle_play");
+}
+
+export async function pause(): Promise<void> {
+  return invoke<void>("pause");
+}
+
+export async function resume(): Promise<void> {
+  return invoke<void>("resume");
+}
+
+export async function nextTrack(): Promise<void> {
+  return invoke<void>("next_track");
+}
+
+export async function prevTrack(): Promise<void> {
+  return invoke<void>("prev_track");
+}
+
+export async function seek(sec: number): Promise<void> {
+  return invoke<void>("seek", { sec });
+}
+
+export async function setVolume(vol: number): Promise<void> {
+  return invoke<void>("set_volume", { vol });
+}
+
+export async function toggleMute(): Promise<void> {
+  return invoke<void>("toggle_mute");
+}
+
+export async function setShuffle(on: boolean): Promise<void> {
+  return invoke<void>("set_shuffle", { on });
+}
+
+export async function setRepeat(mode: string): Promise<void> {
+  return invoke<void>("set_repeat", { mode });
+}
+
+export async function pickMusicFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_music_folder");
+}
+
+// ─── Events ────────────────────────────────────────────────────────
+
+export function onPosition(
+  callback: (payload: PositionPayload) => void,
 ): Promise<UnlistenFn> {
-  return listen("library_updated", () => callback());
+  return listen<PositionPayload>("position", (event) => {
+    callback(event.payload);
+  });
 }
 
 export function onPlaybackState(
   callback: (payload: PlayerStateDto) => void,
 ): Promise<UnlistenFn> {
   return listen<PlayerStateDto>("playback_state", (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onTrackChanged(
+  callback: (payload: { track_id: number }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ track_id: number }>("track_changed", (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onLibraryUpdated(callback: () => void): Promise<UnlistenFn> {
+  return listen("library_updated", () => callback());
+}
+
+export function onScanProgress(
+  callback: (payload: { scanned?: number; done?: boolean }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ scanned?: number; done?: boolean }>("scan_progress", (event) => {
     callback(event.payload);
   });
 }

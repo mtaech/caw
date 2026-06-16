@@ -333,9 +333,13 @@ function toggleAddFromContext(_event: MouseEvent) {
   showContextAddMenu.value = !showContextAddMenu.value;
 }
 
-function addContextTrackToPlaylist(playlistId: number) {
+async function addContextTrackToPlaylist(playlistId: number) {
   if (contextMenu.value) {
-    plStore.addTracks(playlistId, [contextMenu.value.track.id]);
+    try {
+      await plStore.addTracks(playlistId, [contextMenu.value.track.id]);
+    } catch (e) {
+      console.error("caw: add to playlist failed", e);
+    }
   }
   closeContextMenu();
 }

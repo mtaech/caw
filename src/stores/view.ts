@@ -61,11 +61,15 @@ export const useViewStore = defineStore("view", () => {
     lastClickedId.value = null;
   }
 
-  function addSelectedToPlaylist(playlistId: number) {
+  async function addSelectedToPlaylist(playlistId: number) {
     const ids = Array.from(selectedTrackIds.value);
     if (ids.length === 0) return;
     const plStore = usePlaylistStore();
-    plStore.addTracks(playlistId, ids);
+    try {
+      await plStore.addTracks(playlistId, ids);
+    } catch (e) {
+      console.error("caw: batch add to playlist failed", e);
+    }
     clearSelection();
   }
   const columnWidths = ref({

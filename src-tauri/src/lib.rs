@@ -5,6 +5,8 @@ mod audio;
 mod controller;
 mod db;
 mod models;
+mod mpris;
+mod tray;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -23,6 +25,7 @@ pub struct CawState {
     pub ctrl: Mutex<PlaybackController>,
     pub music_dir: Mutex<Option<PathBuf>>,
     pub db: db::Database,
+    pub mpris_tx: Mutex<Option<std::sync::mpsc::SyncSender<u32>>>,
 }
 
 // ── Commands ───────────────────────────────────────────────────────
@@ -345,6 +348,7 @@ pub fn run() {
             ctrl: Mutex::new(PlaybackController::new()),
             music_dir: Mutex::new(None),
             db: db::Database::open(),
+            mpris_tx: Mutex::new(None),
         })
         .setup(|app| {
             // ── Restore persisted music_dir and start background scan ──
@@ -369,6 +373,15 @@ pub fn run() {
                     }
                 }
             }
+
+            // ── System tray ──
+            if let Err(e) = tray::setup_tray(app.handle()) {
+                eprintln!("caw: tray setup error: {e}");
+            }
+
+            // ── MPRIS (media keys + DE integration) ──
+            let mpris_tx = mpris::spawn_mpris(app.handle().clone());
+            *app.state::<CawState>().mpris_tx.lock().unwrap() = Some(mpris_tx.sender.clone());
 
             // ── Position tick + auto-advance task ──
             let tick_handle = app.handle().clone();

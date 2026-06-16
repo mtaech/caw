@@ -267,6 +267,15 @@ impl PlaybackController {
         let _ = self.player().send(PlayerCommand::Seek(pos_secs));
     }
 
+    /// Stop playback: send Stop command, clear track, set state to Stopped.
+    pub fn stop_playback(&mut self) {
+        if let Some(ref player) = self.player {
+            let _ = player.send(PlayerCommand::Stop);
+        }
+        self.current_track_id = None;
+        self.state = CtrlState::Stopped;
+    }
+
     fn sync_player_volume(&mut self) {
         let _ = self
             .player()

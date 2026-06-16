@@ -25,6 +25,13 @@ cpal = "0.18"
 # Database
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# D-Bus / MPRIS (Linux media keys + DE integration)
+zbus = "5"
+zvariant = "5"
+
+# Event loop for D-Bus (separate thread)
+tokio = { version = "1", features = ["rt", "sync"] }
+
 # Utilities
 anyhow = "1"
 crossbeam-channel = "0.5"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
+import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 
 import TitleBar from "@/components/TitleBar.vue";
 import Sidebar from "@/components/Sidebar.vue";
@@ -8,6 +9,8 @@ import Content from "@/components/Content.vue";
 import PlayerBar from "@/components/PlayerBar.vue";
 import Button from "@/components/ui/Button.vue";
 import { Disc3, FolderOpen } from "lucide-vue-next";
+
+useKeyboardShortcuts();
 
 const playback = usePlaybackStore();
 onMounted(async () => {

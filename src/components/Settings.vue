@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { FolderOpen, FolderX, Music, X } from "lucide-vue-next";
+import { ref, onMounted, onUnmounted } from "vue";
+import { FolderOpen, FolderX, Music, RefreshCw, X } from "lucide-vue-next";
+import { listen } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "@/components/ui/Button.vue";
 import * as api from "@/lib/tauri";
 
 const musicDirs = ref<string[]>([]);
 const loading = ref(true);
+const scanning = ref(false);
 const minimizeToTray = ref(false);
 
 onMounted(async () => {
@@ -14,6 +17,23 @@ onMounted(async () => {
     minimizeToTray.value = await api.getMinimizeToTray();
   } catch {}
   await loadDirs();
+
+  // Listen for scan completion to reset scanning state
+  unlisteners.push(
+    await listen("library_updated", () => {
+      scanning.value = false;
+    }),
+  );
+  unlisteners.push(
+    await listen("scan_progress", () => {
+      // Keep scanning true until we see library_updated
+    }),
+  );
+});
+
+const unlisteners: UnlistenFn[] = [];
+onUnmounted(() => {
+  for (const fn of unlisteners) fn();
 });
 
 async function handleMinimizeToggle() {
@@ -42,10 +62,22 @@ async function handleAddDir() {
   try {
     const result = await invoke<string | null>("pick_music_folder");
     if (result !== null) {
+      scanning.value = true;
       await loadDirs();
     }
   } catch (e) {
     console.error("caw: pick folder failed", e);
+  }
+}
+
+async function handleRescan() {
+  scanning.value = true;
+  try {
+    await api.rescanAll();
+    // scan_progress / library_updated events will update state
+  } catch (e) {
+    console.error("caw: rescan failed", e);
+    scanning.value = false;
   }
 }
 
@@ -102,10 +134,16 @@ async function handleRemoveDir(path: string) {
       </div>
 
       <!-- Add button -->
-      <Button variant="outline" size="md" @click="handleAddDir">
-        <FolderOpen class="w-4 h-4 mr-2" />
-        添加目录
-      </Button>
+      <div class="flex items-center gap-2">
+        <Button variant="outline" size="md" @click="handleAddDir">
+          <FolderOpen class="w-4 h-4 mr-2" />
+          添加目录
+        </Button>
+        <Button variant="outline" size="md" @click="handleRescan" :disabled="scanning">
+          <RefreshCw class="w-4 h-4 mr-2" :class="{ 'animate-spin': scanning }" />
+          重新扫描
+        </Button>
+      </div>
     </section>
 
     <!-- Behavior section -->

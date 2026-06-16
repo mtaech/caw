@@ -211,3 +211,7 @@ export async function setMinimizeToTray(enable: boolean): Promise<void> {
 export async function playNext(id: number): Promise<void> {
   return invoke<void>("play_next", { id });
 }
+
+export async function rescanAll(): Promise<void> {
+  return invoke<void>("rescan_all");
+}

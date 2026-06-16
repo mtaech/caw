@@ -122,6 +122,24 @@ async fn set_minimize_to_tray(app: AppHandle, state: tauri::State<'_, CawState>,
     Ok(())
 }
 
+/// Re-scan all configured music directories (handles additions/deletions/dedup).
+#[tauri::command]
+fn rescan_all(app: AppHandle, state: tauri::State<CawState>) -> Result<(), String> {
+    let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?.clone();
+    if dirs.is_empty() {
+        return Err("没有配置的音乐目录".into());
+    }
+    {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.scanning = true;
+    }
+    let h = app.clone();
+    std::thread::spawn(move || {
+        scan_all_libraries(h, dirs);
+    });
+    Ok(())
+}
+
 /// Return the list of configured music directories.
 #[tauri::command]
 fn get_music_dirs(state: tauri::State<CawState>) -> Vec<String> {
@@ -601,6 +619,7 @@ pub fn run() {
             remove_music_dir,
             get_minimize_to_tray,
             set_minimize_to_tray,
+            rescan_all,
             list_playlists,
             get_playlist,
             create_playlist,

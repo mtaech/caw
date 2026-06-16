@@ -141,10 +141,10 @@ const addMenuTrackId = ref<number | null>(null);
 
 const columns = [
   { key: "index", label: "#", width: 40 },
-  { key: "title", label: "Title", width: 400 },
-  { key: "artist", label: "Artist", width: 240 },
-  { key: "album", label: "Album", width: 240 },
-  { key: "duration", label: "Duration", width: 80 },
+  { key: "title", label: "标题", width: 400 },
+  { key: "artist", label: "艺人", width: 240 },
+  { key: "album", label: "专辑", width: 240 },
+  { key: "duration", label: "时长", width: 80 },
 ];
 
 const parentRef = ref<HTMLDivElement | null>(null);

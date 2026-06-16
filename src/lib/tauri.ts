@@ -199,3 +199,11 @@ export async function getMusicDirs(): Promise<string[]> {
 export async function removeMusicDir(path: string): Promise<void> {
   return invoke<void>("remove_music_dir", { path });
 }
+
+export async function getMinimizeToTray(): Promise<boolean> {
+  return invoke<boolean>("get_minimize_to_tray");
+}
+
+export async function setMinimizeToTray(enable: boolean): Promise<void> {
+  return invoke<void>("set_minimize_to_tray", { enable });
+}

@@ -7,6 +7,25 @@ import * as api from "@/lib/tauri";
 
 const musicDirs = ref<string[]>([]);
 const loading = ref(true);
+const minimizeToTray = ref(false);
+
+onMounted(async () => {
+  try {
+    minimizeToTray.value = await api.getMinimizeToTray();
+  } catch {}
+  await loadDirs();
+});
+
+async function handleMinimizeToggle() {
+  const newVal = !minimizeToTray.value;
+  minimizeToTray.value = newVal;
+  try {
+    await api.setMinimizeToTray(newVal);
+  } catch (e) {
+    console.error("caw: failed to set minimize_to_tray", e);
+    minimizeToTray.value = !newVal;
+  }
+}
 
 async function loadDirs() {
   loading.value = true;
@@ -38,10 +57,6 @@ async function handleRemoveDir(path: string) {
     console.error("caw: remove music dir failed", e);
   }
 }
-
-onMounted(() => {
-  loadDirs();
-});
 </script>
 
 <template>
@@ -91,6 +106,27 @@ onMounted(() => {
         <FolderOpen class="w-4 h-4 mr-2" />
         添加目录
       </Button>
+    </section>
+
+    <!-- Behavior section -->
+    <section class="space-y-3">
+      <h2 class="text-body-md text-foreground">行为</h2>
+      <div class="flex items-center justify-between px-4 py-3 rounded-lg bg-elevated border border-border">
+        <div class="space-y-0.5">
+          <p class="text-body text-foreground">关闭时最小化到托盘</p>
+          <p class="text-body-sm text-muted-foreground">关闭窗口时隐藏到系统托盘而非退出</p>
+        </div>
+        <button
+          class="relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0"
+          :class="minimizeToTray ? 'bg-primary' : 'bg-border'"
+          @click="handleMinimizeToggle"
+        >
+          <span
+            class="absolute top-0.5 w-4 h-4 rounded-full bg-foreground shadow transition-transform duration-200"
+            :class="minimizeToTray ? 'translate-x-[18px]' : 'translate-x-[2px]'"
+          />
+        </button>
+      </div>
     </section>
 
     <!-- About section -->

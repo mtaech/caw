@@ -27,6 +27,7 @@ pub struct CawState {
     pub music_dirs: Mutex<Vec<PathBuf>>,
     pub db: db::Database,
     pub mpris_tx: Mutex<Option<std::sync::mpsc::SyncSender<u32>>>,
+    pub minimize_to_tray: Mutex<bool>,
 }
 
 // ── Commands ───────────────────────────────────────────────────────
@@ -93,6 +94,32 @@ async fn pick_music_folder(app: AppHandle, state: tauri::State<'_, CawState>) ->
     });
 
     Ok(Some(path_str))
+}
+
+/// Return whether "minimize to tray on close" is enabled.
+#[tauri::command]
+fn get_minimize_to_tray(state: tauri::State<CawState>) -> bool {
+    *state.minimize_to_tray.lock().unwrap()
+}
+
+/// Enable or disable "minimize to tray on close".
+///
+/// Persists the choice to the store so it survives restarts; also updates
+/// the in-memory flag on CawState so the window event handler can read it
+/// without hitting the store on every close attempt.
+#[tauri::command]
+async fn set_minimize_to_tray(app: AppHandle, state: tauri::State<'_, CawState>, enable: bool) -> Result<(), String> {
+    {
+        let mut v = state.minimize_to_tray.lock().map_err(|e| e.to_string())?;
+        *v = enable;
+    }
+    // Persist
+    use tauri_plugin_store::StoreExt;
+    if let Ok(store) = app.store("config.json") {
+        store.set("minimize_to_tray", serde_json::Value::Bool(enable));
+        let _ = store.save();
+    }
+    Ok(())
 }
 
 /// Return the list of configured music directories.
@@ -415,6 +442,7 @@ pub fn run() {
             music_dirs: Mutex::new(Vec::new()),
             db: db::Database::open(),
             mpris_tx: Mutex::new(None),
+            minimize_to_tray: Mutex::new(false),
         })
         .setup(|app| {
             // ── Restore persisted music dirs and start background scan ──
@@ -478,6 +506,18 @@ pub fn run() {
             let mpris_tx = mpris::spawn_mpris(app.handle().clone());
             *app.state::<CawState>().mpris_tx.lock().unwrap() = Some(mpris_tx.sender.clone());
 
+            // ── Read persistable minimze_to_tray setting ──
+            {
+                use tauri_plugin_store::StoreExt;
+                if let Ok(store) = app.store("config.json") {
+                    if let Some(val) = store.get("minimize_to_tray") {
+                        if let Some(b) = val.as_bool() {
+                            *app.state::<CawState>().minimize_to_tray.lock().unwrap() = b;
+                        }
+                    }
+                }
+            }
+
             // ── Position tick + auto-advance task ──
             let tick_handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -519,6 +559,15 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.app_handle().state::<CawState>();
+                if *state.minimize_to_tray.lock().unwrap() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_library,
@@ -538,6 +587,8 @@ pub fn run() {
             pick_music_folder,
             get_music_dirs,
             remove_music_dir,
+            get_minimize_to_tray,
+            set_minimize_to_tray,
             list_playlists,
             get_playlist,
             create_playlist,

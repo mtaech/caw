@@ -93,7 +93,7 @@
             </span>
             <div class="relative" @click.stop>
               <button
-                class="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition-all p-0.5"
+                class="opacity-40 group-hover:opacity-100 text-muted-foreground hover:text-primary transition-all p-0.5"
                 title="添加到播放列表"
                 @click="toggleAddMenu(row._track.id, $event)"
               >

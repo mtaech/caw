@@ -63,20 +63,29 @@
 
     <!-- Empty state -->
     <div
-      v-if="!currentPath && subDirs.length === 0 && folderTracks.length === 0"
+      v-if="!currentPath && musicRoots.length === 0"
       class="flex flex-col items-center justify-center h-full text-muted-foreground gap-2"
     >
       <FolderOpen class="w-12 h-12" />
       <p class="text-body">尚无音乐目录</p>
       <p class="text-body-sm">请先在设置中添加音乐目录</p>
     </div>
+    <!-- Scanning / empty library state -->
+    <div
+      v-else-if="!currentPath && playback.library.length === 0"
+      class="flex flex-col items-center justify-center h-full text-muted-foreground gap-2"
+    >
+      <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <p class="text-body-sm">曲库扫描中……</p>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Folder, FolderOpen, ChevronLeft } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
+import * as api from "@/lib/tauri";
 
 const playback = usePlaybackStore();
 
@@ -87,6 +96,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "navigate", path: string | null): void;
 }>();
+
+/** Configured music directories from Settings (root level) */
+const musicRoots = ref<string[]>([]);
+
+onMounted(async () => {
+  try {
+    musicRoots.value = await api.getMusicDirs();
+  } catch (e) {
+    console.error("caw: failed to load music dirs for folder view", e);
+  }
+});
 
 const currentLabel = computed(() => {
   if (!props.currentPath) return "";
@@ -116,16 +136,19 @@ const allDirEntries = computed(() => {
 
 /**
  * Immediate subdirectories under the currentPath.
- * When currentPath is null, returns top-level dirs (e.g. "/home", "/media").
+ * When currentPath is null, returns the user's configured music directories.
  */
 const subDirs = computed(() => {
   const prefix = props.currentPath;
-  if (prefix === null || prefix === "/") {
-    // Root level: extract top-level directory names from each entry
+  if (prefix === null) {
+    // Root level: show configured music directories
+    return musicRoots.value.slice().sort();
+  }
+  if (prefix === "/") {
+    // Under filesystem root: show top-level dirs from track paths
     const top = new Set<string>();
     for (const dir of allDirEntries.value) {
-      // dir is like "/home", "/home/user/Music", "/media"
-      const parts = dir.replace(/^\/+/, "").split("/"); // ["home",...] or ["media",...]
+      const parts = dir.replace(/^\/+/, "").split("/");
       if (parts.length > 0 && parts[0]) top.add("/" + parts[0]);
     }
     return Array.from(top).sort();

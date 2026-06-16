@@ -98,6 +98,52 @@ export async function pickMusicFolder(): Promise<string | null> {
   return invoke<string | null>("pick_music_folder");
 }
 
+// ─── Playlist Commands ────────────────────────────────────────────────
+
+export interface PlaylistRow {
+  id: number;
+  name: string;
+  track_count: number;
+}
+
+export interface PlaylistWithTracks {
+  id: number;
+  name: string;
+  track_ids: number[];
+}
+
+export async function listPlaylists(): Promise<PlaylistRow[]> {
+  return invoke<PlaylistRow[]>("list_playlists");
+}
+
+export async function getPlaylist(id: number): Promise<PlaylistWithTracks | null> {
+  return invoke<PlaylistWithTracks | null>("get_playlist", { id });
+}
+
+export async function createPlaylist(name: string): Promise<number> {
+  return invoke<number>("create_playlist", { name });
+}
+
+export async function renamePlaylist(id: number, name: string): Promise<void> {
+  return invoke<void>("rename_playlist", { id, name });
+}
+
+export async function deletePlaylist(id: number): Promise<void> {
+  return invoke<void>("delete_playlist", { id });
+}
+
+export async function addToPlaylist(playlistId: number, trackIds: number[]): Promise<void> {
+  return invoke<void>("add_to_playlist", { playlistId, trackIds });
+}
+
+export async function removeFromPlaylist(playlistId: number, trackIds: number[]): Promise<void> {
+  return invoke<void>("remove_from_playlist", { playlistId, trackIds });
+}
+
+export async function reorderPlaylist(playlistId: number, trackId: number, newPosition: number): Promise<void> {
+  return invoke<void>("reorder_playlist", { playlistId, trackId, newPosition });
+}
+
 // ─── Events ────────────────────────────────────────────────────────
 
 export function onPosition(
@@ -132,6 +178,14 @@ export function onScanProgress(
   callback: (payload: { scanned?: number; done?: boolean }) => void,
 ): Promise<UnlistenFn> {
   return listen<{ scanned?: number; done?: boolean }>("scan_progress", (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onPlaylistChanged(
+  callback: (payload: { id?: number }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ id?: number }>("playlist_changed", (event) => {
     callback(event.payload);
   });
 }

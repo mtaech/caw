@@ -31,7 +31,7 @@
           }"
           :class="rowClasses(row._track)"
           @dblclick="view.playTrackById(row._track.id)"
-          @click="view.setSelectedTrack(row._track.id)"
+          @click="onRowClick(row._track.id)"
         >
           <!-- # / now playing indicator -->
           <div
@@ -86,12 +86,38 @@
             {{ row._track.album }}
           </div>
 
-          <!-- Duration -->
-          <div
-            class="text-body-sm text-muted-foreground tabular-nums text-right flex-shrink-0"
-            :style="{ width: view.columnWidths.duration + 'px' }"
-          >
-            {{ fmt(row._track.duration_secs) }}
+          <!-- Duration + actions -->
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <span class="text-body-sm text-muted-foreground tabular-nums" :style="{ width: view.columnWidths.duration + 'px' }">
+              {{ fmt(row._track.duration_secs) }}
+            </span>
+            <div class="relative" @click.stop>
+              <button
+                class="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition-all p-0.5"
+                title="添加到播放列表"
+                @click="toggleAddMenu(row._track.id, $event)"
+              >
+                <Plus class="w-3.5 h-3.5" />
+              </button>
+              <!-- Add-to-playlist dropdown -->
+              <div
+                v-if="addMenuTrackId === row._track.id"
+                class="absolute right-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-xl z-50 py-1"
+              >
+                <p v-if="plStore.playlists.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
+                  暂无播放列表
+                </p>
+                <button
+                  v-for="pl in plStore.playlists"
+                  :key="pl.id"
+                  class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate"
+                  @click.stop="addToPlaylist(pl.id, row._track.id)"
+                >
+                  <ListMusic class="w-3 h-3 inline mr-2 text-muted-foreground" />
+                  {{ pl.name }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -102,12 +128,16 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Play, ChevronUp, ChevronDown } from "lucide-vue-next";
+import { Play, ChevronUp, ChevronDown, Plus, ListMusic } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
 import { useViewStore } from "@/stores/view";
+import { usePlaylistStore } from "@/stores/playlists";
 
 const playback = usePlaybackStore();
 const view = useViewStore();
+const plStore = usePlaylistStore();
+
+const addMenuTrackId = ref<number | null>(null);
 
 const columns = [
   { key: "index", label: "#", width: 40 },
@@ -158,6 +188,31 @@ function fmt(sec: number): string {
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
+
+function onRowClick(trackId: number) {
+  view.setSelectedTrack(trackId);
+  addMenuTrackId.value = null;
+}
+
+function toggleAddMenu(trackId: number, event: MouseEvent) {
+  event.stopPropagation();
+  if (addMenuTrackId.value === trackId) {
+    addMenuTrackId.value = null;
+  } else {
+    addMenuTrackId.value = trackId;
+  }
+}
+
+function addToPlaylist(playlistId: number, trackId: number) {
+  plStore.addTracks(playlistId, [trackId]);
+  addMenuTrackId.value = null;
+}
+
+// Close menu on list change
+watch(
+  () => tracks.value.length,
+  () => { addMenuTrackId.value = null; }
+);
 
 // Re-measure when playing track changes (for the indicator)
 watch(

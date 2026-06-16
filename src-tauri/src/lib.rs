@@ -3,6 +3,7 @@
 
 mod audio;
 mod controller;
+mod db;
 mod models;
 
 use std::path::PathBuf;
@@ -21,6 +22,7 @@ use crate::controller::{
 pub struct CawState {
     pub ctrl: Mutex<PlaybackController>,
     pub music_dir: Mutex<Option<PathBuf>>,
+    pub db: db::Database,
 }
 
 // ── Commands ───────────────────────────────────────────────────────
@@ -271,6 +273,68 @@ fn set_repeat(
     Ok(())
 }
 
+// ── Playlist Commands ────────────────────────────────────────────────
+
+/// List all playlists.
+#[tauri::command]
+fn list_playlists(state: tauri::State<CawState>) -> Vec<db::PlaylistRow> {
+    state.db.list_playlists()
+}
+
+/// Get a single playlist with its track IDs.
+#[tauri::command]
+fn get_playlist(state: tauri::State<CawState>, id: i64) -> Option<db::PlaylistWithTracks> {
+    state.db.get_playlist(id)
+}
+
+/// Create a new playlist. Returns the new playlist ID.
+#[tauri::command]
+fn create_playlist(app: AppHandle, state: tauri::State<CawState>, name: String) -> Result<i64, String> {
+    let id = state.db.create_playlist(&name).map_err(|e| e.to_string())?;
+    let _ = app.emit("playlist_changed", serde_json::json!({}));
+    Ok(id)
+}
+
+/// Rename a playlist.
+#[tauri::command]
+fn rename_playlist(app: AppHandle, state: tauri::State<CawState>, id: i64, name: String) -> Result<(), String> {
+    state.db.rename_playlist(id, &name).map_err(|e| e.to_string())?;
+    let _ = app.emit("playlist_changed", serde_json::json!({}));
+    Ok(())
+}
+
+/// Delete a playlist.
+#[tauri::command]
+fn delete_playlist(app: AppHandle, state: tauri::State<CawState>, id: i64) -> Result<(), String> {
+    state.db.delete_playlist(id).map_err(|e| e.to_string())?;
+    let _ = app.emit("playlist_changed", serde_json::json!({}));
+    Ok(())
+}
+
+/// Add tracks to a playlist.
+#[tauri::command]
+fn add_to_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: i64, track_ids: Vec<i64>) -> Result<(), String> {
+    state.db.add_tracks(playlist_id, &track_ids).map_err(|e| e.to_string())?;
+    let _ = app.emit("playlist_changed", serde_json::json!({ "id": playlist_id }));
+    Ok(())
+}
+
+/// Remove tracks from a playlist.
+#[tauri::command]
+fn remove_from_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: i64, track_ids: Vec<i64>) -> Result<(), String> {
+    state.db.remove_tracks(playlist_id, &track_ids).map_err(|e| e.to_string())?;
+    let _ = app.emit("playlist_changed", serde_json::json!({ "id": playlist_id }));
+    Ok(())
+}
+
+/// Reorder a track within a playlist.
+#[tauri::command]
+fn reorder_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: i64, track_id: i64, new_position: i64) -> Result<(), String> {
+    state.db.reorder(playlist_id, track_id, new_position).map_err(|e| e.to_string())?;
+    let _ = app.emit("playlist_changed", serde_json::json!({ "id": playlist_id }));
+    Ok(())
+}
+
 // ── App Entry ──────────────────────────────────────────────────────
 
 pub fn run() {
@@ -280,6 +344,7 @@ pub fn run() {
         .manage(CawState {
             ctrl: Mutex::new(PlaybackController::new()),
             music_dir: Mutex::new(None),
+            db: db::Database::open(),
         })
         .setup(|app| {
             // ── Restore persisted music_dir and start background scan ──
@@ -363,6 +428,14 @@ pub fn run() {
             set_shuffle,
             set_repeat,
             pick_music_folder,
+            list_playlists,
+            get_playlist,
+            create_playlist,
+            rename_playlist,
+            delete_playlist,
+            add_to_playlist,
+            remove_from_playlist,
+            reorder_playlist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Caw Tauri application");

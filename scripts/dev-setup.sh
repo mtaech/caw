@@ -27,7 +27,7 @@ fi
 gtk-update-icon-cache -f ~/.local/share/icons/hicolor 2>/dev/null || true
 
 # ── 2. Install .desktop file ──
-DESKTOP_DEST="$HOME/.local/share/applications/com.caw.player.desktop"
+DESKTOP_DEST="$HOME/.local/share/applications/cn.cyber-nest.caw.desktop"
 
 cat > "$DESKTOP_DEST" << EOF
 [Desktop Entry]

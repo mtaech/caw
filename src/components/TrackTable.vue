@@ -18,6 +18,43 @@
       </div>
     </div>
 
+    <!-- Batch action bar (multi-select) -->
+    <div
+      v-if="view.selectedTrackIds.size > 0"
+      class="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated flex-shrink-0"
+    >
+      <span class="text-body-sm text-foreground">已选 {{ view.selectedTrackIds.size }} 首</span>
+      <div class="relative">
+        <Button size="sm" variant="outline" @click="toggleBatchAddMenu($event)">
+          添加到播放列表
+        </Button>
+        <div
+          v-if="showBatchAddMenu"
+          class="absolute left-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-xl z-50 py-1"
+        >
+          <p v-if="plStore.playlists.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
+            暂无播放列表
+          </p>
+          <button
+            v-for="pl in plStore.playlists"
+            :key="pl.id"
+            class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate"
+            @click.stop="batchAddToPlaylist(pl.id)"
+          >
+            <ListMusic class="w-3 h-3 inline mr-2 text-muted-foreground" />
+            {{ pl.name }}
+          </button>
+        </div>
+      </div>
+      <button
+        class="ml-auto text-muted-foreground hover:text-foreground p-1"
+        @click="view.clearSelection()"
+        title="取消选择"
+      >
+        <X class="w-4 h-4" />
+      </button>
+    </div>
+
     <!-- Virtualized rows -->
     <div ref="parentRef" class="flex-1 overflow-auto">
       <div v-if="virtualizer" class="relative" :style="{ height: virtualizer.getTotalSize() + 'px' }">
@@ -31,7 +68,8 @@
           }"
           :class="rowClasses(row._track)"
           @dblclick="view.playTrackById(row._track.id)"
-          @click="onRowClick(row._track.id)"
+          @click="handleRowClick(row._track.id, $event)"
+          @contextmenu.prevent="showContextMenu(row._track, $event)"
         >
           <!-- # / now playing indicator -->
           <div
@@ -123,15 +161,59 @@
       </div>
     </div>
   </div>
+
+  <!-- Context menu (right-click) -->
+  <div
+    v-if="contextMenu"
+    class="fixed z-[100] w-44 bg-elevated border border-border rounded-lg shadow-xl py-1"
+    :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+    @click.stop
+  >
+    <button
+      class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
+      @click="playContextTrack()"
+    >
+      <Play class="w-3.5 h-3.5" /> 播放
+    </button>
+    <div class="relative">
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
+        @click.stop="toggleAddFromContext($event)"
+      >
+        <Plus class="w-3.5 h-3.5" /> 添加到播放列表
+      </button>
+      <div
+        v-if="showContextAddMenu"
+        class="absolute left-full top-0 ml-1 w-44 bg-elevated border border-border rounded-lg shadow-xl py-1 z-[101]"
+      >
+        <p
+          v-if="plStore.playlists.length === 0"
+          class="px-3 py-2 text-xs text-muted-foreground"
+        >
+          暂无播放列表
+        </p>
+        <button
+          v-for="pl in plStore.playlists"
+          :key="pl.id"
+          class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate"
+          @click.stop="addContextTrackToPlaylist(pl.id)"
+        >
+          <ListMusic class="w-3 h-3 inline mr-2 text-muted-foreground" />
+          {{ pl.name }}
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Play, ChevronUp, ChevronDown, Plus, ListMusic } from "lucide-vue-next";
+import { Play, ChevronUp, ChevronDown, Plus, ListMusic, X } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
+import Button from "@/components/ui/Button.vue";
 
 const playback = usePlaybackStore();
 const view = useViewStore();
@@ -173,11 +255,11 @@ const virtualRows = computed(() => {
 
 function rowClasses(track: any) {
   const isCurrent = track.id === playback.currentTrackId;
-  const isSelected = track.id === view.selectedTrackId;
+  const isSelected = view.selectedTrackIds.has(track.id);
   return {
     "bg-primary/10": isCurrent,
     "bg-elevated-hover": isSelected && !isCurrent,
-    "hover:bg-elevated-hover": !isCurrent,
+    "hover:bg-elevated-hover": !isCurrent && !isSelected,
     "text-foreground": true,
   };
 }
@@ -189,9 +271,15 @@ function fmt(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function onRowClick(trackId: number) {
+
+function handleRowClick(trackId: number, event: MouseEvent) {
   view.setSelectedTrack(trackId);
+  view.selectTrack(trackId, {
+    ctrlKey: event.ctrlKey || event.metaKey,
+    shiftKey: event.shiftKey,
+  });
   addMenuTrackId.value = null;
+  closeContextMenu();
 }
 
 function toggleAddMenu(trackId: number, event: MouseEvent) {
@@ -206,6 +294,82 @@ function toggleAddMenu(trackId: number, event: MouseEvent) {
 function addToPlaylist(playlistId: number, trackId: number) {
   plStore.addTracks(playlistId, [trackId]);
   addMenuTrackId.value = null;
+}
+
+// ── Context menu (right-click) ──
+const contextMenu = ref<{ x: number; y: number; track: any } | null>(null);
+const showContextAddMenu = ref(false);
+
+function showContextMenu(track: any, event: MouseEvent) {
+  // Position menu, bounded to viewport
+  let x = event.clientX;
+  let y = event.clientY;
+  // Ensure the menu (≈150px wide, ≈150px tall) stays within viewport
+  const ww = window.innerWidth;
+  const wh = window.innerHeight;
+  const mw = 176; // w-44 = 176px
+  const mh = 150;
+  if (x + mw + 4 > ww) x = ww - mw - 4;
+  if (y + mh + 4 > wh) y = wh - mh - 4;
+
+  contextMenu.value = { x, y, track };
+  showContextAddMenu.value = false;
+}
+
+function closeContextMenu() {
+  contextMenu.value = null;
+  showContextAddMenu.value = false;
+}
+
+function playContextTrack() {
+  if (contextMenu.value) {
+    const ids = tracks.value.map((t: any) => t.id);
+    playback.playTracks(ids, contextMenu.value.track.id);
+  }
+  closeContextMenu();
+}
+
+function toggleAddFromContext(_event: MouseEvent) {
+  showContextAddMenu.value = !showContextAddMenu.value;
+}
+
+function addContextTrackToPlaylist(playlistId: number) {
+  if (contextMenu.value) {
+    plStore.addTracks(playlistId, [contextMenu.value.track.id]);
+  }
+  closeContextMenu();
+}
+
+// ── Batch bar (multi-select add to playlist) ──
+const showBatchAddMenu = ref(false);
+
+function toggleBatchAddMenu(_event: MouseEvent) {
+  showBatchAddMenu.value = !showBatchAddMenu.value;
+}
+
+function batchAddToPlaylist(playlistId: number) {
+  view.addSelectedToPlaylist(playlistId);
+  showBatchAddMenu.value = false;
+}
+
+// Close menus on click outside
+function onClickDocument() {
+  closeContextMenu();
+  showBatchAddMenu.value = false;
+}
+
+onMounted(() => {
+  document.addEventListener("click", onClickDocument);
+  document.addEventListener("keydown", onKeyDown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", onClickDocument);
+  document.removeEventListener("keydown", onKeyDown);
+});
+
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === "Escape") closeContextMenu();
 }
 
 // Close menu on list change

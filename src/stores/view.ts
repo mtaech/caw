@@ -5,6 +5,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { usePlaybackStore } from "./playback";
+import { usePlaylistStore } from "./playlists";
 
 export type NavItem = "all-music" | "artists" | "albums" | "playlists" | "folders" | "settings";
 export type SortKey = "title" | "artist" | "album" | "duration";
@@ -20,6 +21,53 @@ export const useViewStore = defineStore("view", () => {
   const sortDir = ref<"asc" | "desc">("asc");
   const detail = ref<DetailTarget>(null);
   const selectedTrackId = ref<number | null>(null);
+  
+  // ── Multi-selection (for batch ops like add to playlist) ──
+  const selectedTrackIds = ref(new Set<number>());
+  const lastClickedId = ref<number | null>(null);
+
+  function selectTrack(id: number, event?: { ctrlKey?: boolean; shiftKey?: boolean }) {
+    const ctrl = event?.ctrlKey ?? false;
+    const shift = event?.shiftKey ?? false;
+
+    if (shift && lastClickedId.value !== null) {
+      // Range select: walk filteredTracks order
+      const ids = filteredTracks.value.map((t) => t.id);
+      const lastIdx = ids.indexOf(lastClickedId.value);
+      const curIdx = ids.indexOf(id);
+      if (lastIdx !== -1 && curIdx !== -1) {
+        const [start, end] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+        const range = ids.slice(start, end + 1);
+        const s = new Set(selectedTrackIds.value);
+        range.forEach((i) => s.add(i));
+        selectedTrackIds.value = s;
+      }
+    } else if (ctrl) {
+      // Toggle single
+      const s = new Set(selectedTrackIds.value);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      selectedTrackIds.value = s;
+    } else {
+      // Plain click — select exclusively
+      selectedTrackIds.value = new Set([id]);
+    }
+    lastClickedId.value = id;
+    selectedTrackId.value = id;
+  }
+
+  function clearSelection() {
+    selectedTrackIds.value = new Set();
+    lastClickedId.value = null;
+  }
+
+  function addSelectedToPlaylist(playlistId: number) {
+    const ids = Array.from(selectedTrackIds.value);
+    if (ids.length === 0) return;
+    const plStore = usePlaylistStore();
+    plStore.addTracks(playlistId, ids);
+    clearSelection();
+  }
   const columnWidths = ref({
     index: 40,
     title: 400,
@@ -169,11 +217,13 @@ export const useViewStore = defineStore("view", () => {
     searchQuery.value = "";
     detail.value = null;
     selectedTrackId.value = null;
+    clearSelection();
   }
 
   function setSearch(q: string) {
     searchQuery.value = q;
     detail.value = null;
+    clearSelection();
   }
 
   function setSort(key: SortKey) {
@@ -195,6 +245,7 @@ export const useViewStore = defineStore("view", () => {
 
   function closeDetail() {
     detail.value = null;
+    clearSelection();
   }
 
   function setSelectedTrack(id: number | null) {
@@ -224,6 +275,11 @@ export const useViewStore = defineStore("view", () => {
     albums,
     artists,
     filteredTracks,
+    selectedTrackIds,
+    lastClickedId,
+    selectTrack,
+    clearSelection,
+    addSelectedToPlaylist,
     setNav,
     setSearch,
     setSort,

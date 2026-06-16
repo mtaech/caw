@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Caw
-Comment=Local music player
-Exec=cargo tauri dev
-Icon=caw
-Terminal=false
-Categories=Audio;Music;Player;
-StartupWMClass=Caw

@@ -10,7 +10,7 @@
     </div>
 
     <!-- Right: window controls -->
-    <div class="flex items-center gap-1" data-tauri-drag-region>
+    <div class="flex items-center gap-1">
       <Button
         variant="ghost"
         size="icon-sm"

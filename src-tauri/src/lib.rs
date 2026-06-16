@@ -239,6 +239,17 @@ fn play_tracks(
     Ok(())
 }
 
+/// Insert a track right after the current queue position and play it.
+#[tauri::command]
+fn play_next(app: AppHandle, state: tauri::State<CawState>, id: u64) -> Result<(), String> {
+    let job = {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.prepare_play_next(id)
+    };
+    controller::execute_decode_job(job, &state.ctrl, &app);
+    Ok(())
+}
+
 /// Toggle between Playing / Paused / Stopped->Playing.
 #[tauri::command]
 fn toggle_play(app: AppHandle, state: tauri::State<CawState>) -> Result<(), String> {
@@ -574,6 +585,7 @@ pub fn run() {
             get_cover,
             get_state,
             play_tracks,
+            play_next,
             toggle_play,
             pause,
             resume,

@@ -45,6 +45,14 @@
           <Pause v-else class="w-4 h-4 fill-background" />
         </button>
 
+        <button
+          class="text-caption text-muted-foreground hover:text-foreground transition-colors px-1.5 tabular-nums select-none whitespace-nowrap"
+          :title="modeTooltip"
+          @click="cyclePlayMode"
+        >
+          {{ currentModeLabel }}
+        </button>
+
         <Button variant="ghost" size="icon-sm" @click="playback.next()">
           <SkipForward class="w-4 h-4" />
         </Button>
@@ -102,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
 import Button from "@/components/ui/Button.vue";
 import Slider from "@/components/ui/Slider.vue";
@@ -141,5 +150,40 @@ function cycleRepeat() {
   const idx = repeatModes.indexOf(playback.repeat as "none" | "all" | "one");
   const next = repeatModes[(idx + 1) % repeatModes.length];
   playback.setRepeat(next);
+}
+
+// Combined playback mode label
+// 顺序播放 (repeat none, no shuffle) → 单曲循环 (repeat one) →
+// 随机播放 (shuffle on) → 列表循环 (repeat all, no shuffle) →
+const playModes = [
+  { shuffle: false, repeat: "none", label: "顺序播放" },
+  { shuffle: false, repeat: "one", label: "单曲循环" },
+  { shuffle: true, repeat: "all", label: "随机播放" },
+  { shuffle: false, repeat: "all", label: "列表循环" },
+] as const;
+
+const currentModeLabel = computed(() => {
+  const s = playback.shuffle;
+  const r = playback.repeat;
+  for (const m of playModes) {
+    if (m.shuffle === s && m.repeat === r) return m.label;
+  }
+  if (r !== "none") {
+    return r === "one" ? "单曲循环" : "列表循环";
+  }
+  return "顺序播放";
+});
+
+const modeTooltip = computed(() => {
+  return `${currentModeLabel.value} — 点击切换`;
+});
+
+function cyclePlayMode() {
+  const s = playback.shuffle;
+  const r = playback.repeat;
+  const idx = playModes.findIndex((m) => m.shuffle === s && m.repeat === r);
+  const next = playModes[(idx + 1) % playModes.length];
+  if (next.shuffle !== s) playback.setShuffle(next.shuffle);
+  if (next.repeat !== r) playback.setRepeat(next.repeat);
 }
 </script>

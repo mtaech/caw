@@ -121,6 +121,24 @@ impl PlaybackController {
         }
     }
 
+    /// Insert a track right after the current queue position and play it.
+    /// If nothing is playing or queue is empty, prepend to the front.
+    pub fn prepare_play_next(&mut self, id: u64) -> DecodeJob {
+        let insert_pos = match self.queue_index {
+            Some(i) if i + 1 < self.queue.len() => i + 1,
+            _ => self.queue.len(),
+        };
+        self.queue.insert(insert_pos, id);
+        self.queue_index = Some(insert_pos);
+        self.current_track_id = Some(id);
+        self.state = CtrlState::Playing;
+        self.ended_track_handled = false;
+        match self.find_track_path(id) {
+            Some(path) => DecodeJob::Play { path, id },
+            None => DecodeJob::None,
+        }
+    }
+
     pub fn prepare_toggle_play(&mut self) -> DecodeJob {
         match self.state {
             CtrlState::Playing => {

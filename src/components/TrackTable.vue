@@ -175,6 +175,12 @@
     >
       <Play class="w-3.5 h-3.5" /> 播放
     </button>
+    <button
+      class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
+      @click="playNextContextTrack()"
+    >
+      <ListOrdered class="w-3.5 h-3.5" /> 下一首播放
+    </button>
     <div class="relative">
       <button
         class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
@@ -209,7 +215,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Play, ChevronUp, ChevronDown, Plus, ListMusic, X } from "lucide-vue-next";
+import { Play, ChevronUp, ChevronDown, Plus, ListMusic, ListOrdered, X } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
@@ -325,6 +331,13 @@ function playContextTrack() {
   if (contextMenu.value) {
     const ids = tracks.value.map((t: any) => t.id);
     playback.playTracks(ids, contextMenu.value.track.id);
+  }
+  closeContextMenu();
+}
+
+function playNextContextTrack() {
+  if (contextMenu.value) {
+    playback.playNextTrack(contextMenu.value.track.id);
   }
   closeContextMenu();
 }

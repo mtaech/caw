@@ -207,3 +207,7 @@ export async function getMinimizeToTray(): Promise<boolean> {
 export async function setMinimizeToTray(enable: boolean): Promise<void> {
   return invoke<void>("set_minimize_to_tray", { enable });
 }
+
+export async function playNext(id: number): Promise<void> {
+  return invoke<void>("play_next", { id });
+}

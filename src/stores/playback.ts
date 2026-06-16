@@ -134,6 +134,10 @@ export const usePlaybackStore = defineStore("playback", () => {
     await api.playTracks(ids, startId);
   }
 
+  async function playNextTrack(id: number) {
+    await api.playNext(id);
+  }
+
   async function togglePlay() {
     await api.togglePlay();
   }
@@ -195,6 +199,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     init,
     cleanup,
     playTracks,
+    playNextTrack,
     togglePlay,
     next,
     prev,

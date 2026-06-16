@@ -6,6 +6,7 @@ mod controller;
 mod db;
 mod models;
 mod mpris;
+mod platform;
 mod tray;
 
 use std::path::PathBuf;
@@ -467,10 +468,7 @@ pub fn run() {
             }
 
             // ── System tray — skip on Wayland (Tauri tray uses X11 StatusIcon) ──
-            let is_wayland = std::env::var("XDG_SESSION_TYPE")
-                .map(|s| s.to_lowercase() == "wayland")
-                .unwrap_or(false);
-            if is_wayland {
+            if platform::is_wayland() {
                 eprintln!("caw: Wayland detected — skipping system tray");
             } else if let Err(e) = tray::setup_tray(app.handle()) {
                 eprintln!("caw: tray setup error: {e}");

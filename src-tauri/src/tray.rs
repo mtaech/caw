@@ -33,8 +33,10 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .item(&quit)
         .build()?;
 
+    let icon = app.default_window_icon().cloned()
+        .ok_or_else(|| "no embedded window icon — tray not available")?;
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().cloned().unwrap())
+        .icon(icon)
         .tooltip("Caw")
         .menu(&menu)
         .on_menu_event(move |app, event| {

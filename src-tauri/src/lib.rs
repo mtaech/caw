@@ -524,11 +524,14 @@ pub fn run() {
                 }
             }
 
-            // ── System tray — skip on Wayland (Tauri tray uses X11 StatusIcon) ──
-            if platform::is_wayland() {
-                eprintln!("caw: Wayland detected — skipping system tray");
-            } else if let Err(e) = tray::setup_tray(app.handle()) {
+            // ── System tray (attempt even on Wayland — GTK may use
+            //    StatusNotifierItem if available via appindicator/SNI bridge) ──
+            if let Err(e) = tray::setup_tray(app.handle()) {
                 eprintln!("caw: tray setup error: {e}");
+                if platform::is_wayland() {
+                    eprintln!("caw: on Wayland, install GNOME AppIndicator extension or");
+                    eprintln!("caw: use KDE for tray icon support (StatusNotifierItem)");
+                }
             }
 
             // ── MPRIS (media keys + DE integration) ──

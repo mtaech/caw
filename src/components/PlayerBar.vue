@@ -31,8 +31,8 @@
           :title="modeTitle"
           @click="cyclePlayMode"
         >
-          <Shuffle v-if="playback.shuffle" class="w-4 h-4" />
-          <Repeat1 v-else-if="playback.repeat === 'one'" class="w-4 h-4" />
+          <Repeat1 v-if="playback.repeat === 'one'" class="w-4 h-4" />
+          <Shuffle v-else-if="playback.shuffle" class="w-4 h-4" />
           <Repeat v-else-if="playback.repeat === 'all'" class="w-4 h-4" />
           <ListOrdered v-else class="w-4 h-4" />
         </Button>
@@ -131,25 +131,26 @@ function onVolume(val: number) {
 }
 
 const modeTitle = computed(() => {
-  if (playback.shuffle) return "随机播放";
-  if (playback.repeat === "one") return "单曲循环";
-  if (playback.repeat === "all") return "列表循环";
-  return "顺序播放";
+  if (playback.repeat === "all" && !playback.shuffle) return "列表播放";
+  if (playback.repeat === "none" && !playback.shuffle) return "顺序播放";
+  if (playback.repeat === "one") return "单曲播放";
+  return "随机播放";
 });
 
 function cyclePlayMode() {
-  if (playback.shuffle) {
-    // 随机播放 → 顺序播放
-    playback.setShuffle(false);
-  } else if (playback.repeat === "one") {
-    // 单曲循环 → 列表循环
-    playback.setRepeat("all");
-  } else if (playback.repeat === "all") {
-    // 列表循环 → 顺序播放
+  if (playback.repeat === "all" && !playback.shuffle) {
+    // 列表 → 顺序
     playback.setRepeat("none");
-  } else {
-    // 顺序播放 → 随机播放
+  } else if (playback.repeat === "none" && !playback.shuffle) {
+    // 顺序 → 单曲
+    playback.setRepeat("one");
+  } else if (playback.repeat === "one") {
+    // 单曲 → 随机
     playback.setShuffle(true);
+    playback.setRepeat("all");
+  } else {
+    // 随机 → 列表
+    playback.setShuffle(false);
     playback.setRepeat("all");
   }
 }

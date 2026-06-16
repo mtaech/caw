@@ -28,32 +28,26 @@
           variant="ghost"
           size="icon-sm"
           :class="{ 'text-primary': playback.shuffle }"
+          title="随机播放"
           @click="playback.setShuffle(!playback.shuffle)"
         >
           <Shuffle class="w-4 h-4" />
         </Button>
 
-        <Button variant="ghost" size="icon-sm" @click="playback.prev()">
+        <Button variant="ghost" size="icon-sm" @click="playback.prev()" title="上一首">
           <SkipBack class="w-4 h-4" />
         </Button>
 
         <button
           class="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
           @click="playback.togglePlay()"
+          title="播放/暂停"
         >
           <Play v-if="!playback.isPlaying" class="w-4 h-4 ml-0.5 fill-background" />
           <Pause v-else class="w-4 h-4 fill-background" />
         </button>
 
-        <button
-          class="text-caption text-muted-foreground hover:text-foreground transition-colors px-1.5 tabular-nums select-none whitespace-nowrap"
-          :title="modeTooltip"
-          @click="cyclePlayMode"
-        >
-          {{ currentModeLabel }}
-        </button>
-
-        <Button variant="ghost" size="icon-sm" @click="playback.next()">
+        <Button variant="ghost" size="icon-sm" @click="playback.next()" title="下一首">
           <SkipForward class="w-4 h-4" />
         </Button>
 
@@ -64,6 +58,7 @@
             'text-primary': playback.repeat !== 'none',
           }"
           @click="cycleRepeat"
+          title="循环模式"
         >
           <Repeat v-if="playback.repeat === 'all'" class="w-4 h-4" />
           <Repeat1 v-else-if="playback.repeat === 'one'" class="w-4 h-4" />
@@ -110,7 +105,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
 import Button from "@/components/ui/Button.vue";
 import Slider from "@/components/ui/Slider.vue";
@@ -150,40 +144,5 @@ function cycleRepeat() {
   const idx = repeatModes.indexOf(playback.repeat as "none" | "all" | "one");
   const next = repeatModes[(idx + 1) % repeatModes.length];
   playback.setRepeat(next);
-}
-
-// Combined playback mode label
-// 顺序播放 (repeat none, no shuffle) → 单曲循环 (repeat one) →
-// 随机播放 (shuffle on) → 列表循环 (repeat all, no shuffle) →
-const playModes = [
-  { shuffle: false, repeat: "none", label: "顺序播放" },
-  { shuffle: false, repeat: "one", label: "单曲循环" },
-  { shuffle: true, repeat: "all", label: "随机播放" },
-  { shuffle: false, repeat: "all", label: "列表循环" },
-] as const;
-
-const currentModeLabel = computed(() => {
-  const s = playback.shuffle;
-  const r = playback.repeat;
-  for (const m of playModes) {
-    if (m.shuffle === s && m.repeat === r) return m.label;
-  }
-  if (r !== "none") {
-    return r === "one" ? "单曲循环" : "列表循环";
-  }
-  return "顺序播放";
-});
-
-const modeTooltip = computed(() => {
-  return `${currentModeLabel.value} — 点击切换`;
-});
-
-function cyclePlayMode() {
-  const s = playback.shuffle;
-  const r = playback.repeat;
-  const idx = playModes.findIndex((m) => m.shuffle === s && m.repeat === r);
-  const next = playModes[(idx + 1) % playModes.length];
-  if (next.shuffle !== s) playback.setShuffle(next.shuffle);
-  if (next.repeat !== r) playback.setRepeat(next.repeat);
 }
 </script>

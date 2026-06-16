@@ -9,9 +9,17 @@ layer (Vue 3 + shadcn-vue + Tailwind).
 
 **Nav item**:
 A first-class section in the sidebar that switches the main content view.
-Current items: 全部音乐, 艺术家, 专辑, 播放列表, 文件夹.
+Current items: 全部音乐, 艺术家, 专辑, 播放列表, 文件夹, 设置.
 _Avoid_: Tab, page, view mode
 
 **Settings**:
-A user-configurable panel that persists preferences (music directory, theme,
-audio output) via the backend store plugin.
+A user-configurable panel in the sidebar that persists preferences via the
+backend store. Currently contains music directory management (multi-directory
+add/remove) and an About section.
+_Avoid_: Preferences, Options
+
+**Music directory**:
+A filesystem path where music files are stored. Multiple directories are
+supported; the library is built by scanning all configured directories and
+deduplicating by file path.
+_Avoid_: Folder path, library path

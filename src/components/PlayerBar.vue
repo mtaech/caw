@@ -27,11 +27,14 @@
         <Button
           variant="ghost"
           size="icon-sm"
-          :class="{ 'text-primary': playback.shuffle }"
-          title="随机播放"
-          @click="playback.setShuffle(!playback.shuffle)"
+          :class="{ 'text-primary': playback.shuffle || playback.repeat !== 'none' }"
+          :title="modeTitle"
+          @click="cyclePlayMode"
         >
-          <Shuffle class="w-4 h-4" />
+          <Shuffle v-if="playback.shuffle" class="w-4 h-4" />
+          <Repeat1 v-else-if="playback.repeat === 'one'" class="w-4 h-4" />
+          <Repeat v-else-if="playback.repeat === 'all'" class="w-4 h-4" />
+          <ListOrdered v-else class="w-4 h-4" />
         </Button>
 
         <Button variant="ghost" size="icon-sm" @click="playback.prev()" title="上一首">
@@ -49,20 +52,6 @@
 
         <Button variant="ghost" size="icon-sm" @click="playback.next()" title="下一首">
           <SkipForward class="w-4 h-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          :class="{
-            'text-primary': playback.repeat !== 'none',
-          }"
-          @click="cycleRepeat"
-          title="循环模式"
-        >
-          <Repeat v-if="playback.repeat === 'all'" class="w-4 h-4" />
-          <Repeat1 v-else-if="playback.repeat === 'one'" class="w-4 h-4" />
-          <Repeat v-else class="w-4 h-4" />
         </Button>
       </div>
 
@@ -105,6 +94,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
 import Button from "@/components/ui/Button.vue";
 import Slider from "@/components/ui/Slider.vue";
@@ -117,6 +107,7 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
+  ListOrdered,
   Volume1,
   Volume2,
   VolumeX,
@@ -139,10 +130,27 @@ function onVolume(val: number) {
   playback.setVolume(val);
 }
 
-const repeatModes = ["none", "all", "one"] as const;
-function cycleRepeat() {
-  const idx = repeatModes.indexOf(playback.repeat as "none" | "all" | "one");
-  const next = repeatModes[(idx + 1) % repeatModes.length];
-  playback.setRepeat(next);
+const modeTitle = computed(() => {
+  if (playback.shuffle) return "随机播放";
+  if (playback.repeat === "one") return "单曲循环";
+  if (playback.repeat === "all") return "列表循环";
+  return "顺序播放";
+});
+
+function cyclePlayMode() {
+  if (playback.shuffle) {
+    // 随机播放 → 顺序播放
+    playback.setShuffle(false);
+  } else if (playback.repeat === "one") {
+    // 单曲循环 → 列表循环
+    playback.setRepeat("all");
+  } else if (playback.repeat === "all") {
+    // 列表循环 → 顺序播放
+    playback.setRepeat("none");
+  } else {
+    // 顺序播放 → 随机播放
+    playback.setShuffle(true);
+    playback.setRepeat("all");
+  }
 }
 </script>

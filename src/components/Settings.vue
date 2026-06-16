@@ -155,14 +155,11 @@ async function handleRemoveDir(path: string) {
           <p class="text-body-sm text-muted-foreground">关闭窗口时隐藏到系统托盘而非退出</p>
         </div>
         <button
-          class="relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0"
-          :class="minimizeToTray ? 'bg-primary' : 'bg-border'"
+          class="w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0 flex items-center p-0.5"
+          :class="minimizeToTray ? 'bg-primary justify-end' : 'bg-border justify-start'"
           @click="handleMinimizeToggle"
         >
-          <span
-            class="absolute top-0.5 w-4 h-4 rounded-full bg-foreground shadow transition-transform duration-200"
-            :class="minimizeToTray ? 'translate-x-[18px]' : 'translate-x-[2px]'"
-          />
+          <div class="w-4 h-4 rounded-full bg-foreground shadow" />
         </button>
       </div>
     </section>

@@ -1,7 +1,9 @@
 <template>
   <aside class="w-60 flex-shrink-0 bg-sidebar flex flex-col border-r border-border">
+    <!-- Section label -->
+    <p class="text-overline px-3 pt-4 pb-1">资料库</p>
     <!-- Nav items -->
-    <nav class="flex flex-col gap-0.5 px-2 pt-4 pb-2">
+    <nav class="flex flex-col gap-0.5 px-2 pb-2">
       <button
         v-for="item in navItems"
         :key="item.id"
@@ -15,9 +17,9 @@
       >
         <div
           v-if="view.nav === item.id"
-          class="absolute left-0 w-0.5 h-5 bg-primary rounded-r-full"
+          class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full"
         />
-        <component :is="item.icon" class="w-4 h-4 flex-shrink-0 ml-0.5" />
+        <component :is="item.icon" class="w-4 h-4 flex-shrink-0" />
         <span>{{ item.label }}</span>
       </button>
     </nav>

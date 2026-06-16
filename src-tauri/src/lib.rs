@@ -460,6 +460,55 @@ fn reorder_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: 
     Ok(())
 }
 
+/// Enumerate system-installed fonts via platform-specific APIs.
+/// Linux uses fontconfig (fc-list); other platforms return empty for now.
+#[tauri::command]
+fn get_system_fonts() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("fc-list")
+            .args(["--format=%{family}\n"])
+            .output()
+            .map_err(|e| format!("caw: failed to run fc-list: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "caw: fc-list exited with {}",
+                output.status
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut families: Vec<String> = stdout
+            .lines()
+            .flat_map(|line| line.split(','))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        families.sort();
+        families.dedup();
+
+        // Exclude icon/symbol/emoji fonts that are unsuitable for UI.
+        families.retain(|f| {
+            let l = f.to_lowercase();
+            !l.contains("emoji")
+                && !l.contains("symbol")
+                && !l.contains("dingbat")
+                && !l.contains("wingding")
+                && !l.contains("webdings")
+        });
+
+        Ok(families)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        // TODO: implement for Windows (DirectWrite) and macOS (CoreText)
+        Ok(vec![])
+    }
+}
+
 // ── App Entry ──────────────────────────────────────────────────────
 
 pub fn run() {
@@ -631,6 +680,7 @@ pub fn run() {
             add_to_playlist,
             remove_from_playlist,
             reorder_playlist,
+            get_system_fonts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Caw Tauri application");

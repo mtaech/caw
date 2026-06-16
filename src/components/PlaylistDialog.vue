@@ -1,37 +1,41 @@
 <template>
   <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center">
-      <!-- Overlay -->
-      <div class="absolute inset-0 bg-overlay" @click="close" />
-      <!-- Dialog panel -->
-      <div class="relative bg-elevated rounded-xl border border-border shadow-xl p-6 w-full max-w-sm mx-4 z-10">
-        <h2 class="text-title text-foreground mb-4">{{ title }}</h2>
-        <input
-          ref="inputRef"
-          v-model="text"
-          type="text"
-          class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary mb-4"
-          :placeholder="placeholder"
-          @keydown.enter="confirm"
-          @keydown.escape="close"
-        />
-        <div class="flex justify-end gap-2">
-          <button
-            class="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-elevated-hover transition-colors"
-            @click="close"
-          >
-            取消
-          </button>
-          <button
-            class="px-3 py-1.5 rounded-md text-sm bg-primary text-background hover:opacity-90 transition-opacity"
-            :disabled="!text.trim()"
-            @click="confirm"
-          >
-            {{ confirmText }}
-          </button>
-        </div>
+    <Transition name="overlay">
+      <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center">
+        <!-- Overlay -->
+        <div class="absolute inset-0 bg-overlay" @click="close" />
+        <!-- Dialog panel -->
+        <Transition name="pop" appear>
+          <div v-if="open" class="relative bg-elevated rounded-xl border border-border shadow-3 p-6 w-full max-w-sm mx-4">
+            <h2 class="text-title text-foreground mb-4">{{ title }}</h2>
+            <input
+              ref="inputRef"
+              v-model="text"
+              type="text"
+              class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring mb-4"
+              :placeholder="placeholder"
+              @keydown.enter="confirm"
+              @keydown.escape="close"
+            />
+            <div class="flex justify-end gap-2">
+              <button
+                class="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-elevated-hover transition-colors"
+                @click="close"
+              >
+                取消
+              </button>
+              <button
+                class="px-3 py-1.5 rounded-md text-sm bg-primary text-background hover:bg-primary-hover transition-colors"
+                :disabled="!text.trim()"
+                @click="confirm"
+              >
+                {{ confirmText }}
+              </button>
+            </div>
+          </div>
+        </Transition>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
 

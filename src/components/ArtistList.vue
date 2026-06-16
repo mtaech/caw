@@ -9,8 +9,11 @@
         class="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-elevated-hover transition-colors duration-120"
         @click="view.openArtist(artist.name)"
       >
-        <div class="w-12 h-12 rounded-full bg-elevated-hover flex items-center justify-center flex-shrink-0">
-          <Users class="w-6 h-6 text-muted-foreground" />
+        <div
+          class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-white text-lg font-semibold select-none"
+          :style="{ background: coverGradient(artist.name) }"
+        >
+          {{ artist.name.charAt(0) }}
         </div>
         <div class="min-w-0">
           <p class="text-body-md text-foreground truncate">{{ artist.name }}</p>
@@ -22,8 +25,8 @@
 </template>
 
 <script setup lang="ts">
-import { Users } from "lucide-vue-next";
 import { useViewStore } from "@/stores/view";
+import { coverGradient } from "@/lib/utils";
 
 const view = useViewStore();
 </script>

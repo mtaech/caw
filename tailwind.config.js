@@ -16,8 +16,11 @@ export default {
           DEFAULT: "hsl(var(--primary))",
           hover: "hsl(var(--primary-hover))",
         },
-        "table-even": "hsl(var(--table-even))",
-        "table-odd": "hsl(var(--table-odd))",
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          hover: "hsl(var(--destructive-hover))",
+        },
+        ring: "hsl(var(--ring))",
         overlay: "hsl(var(--overlay))",
       },
       borderRadius: {
@@ -28,12 +31,7 @@ export default {
         full: "var(--radius-full)",
       },
       fontFamily: {
-        sans: [
-          "Noto Sans CJK SC",
-          "system-ui",
-          "-apple-system",
-          "sans-serif",
-        ],
+        sans: ["var(--font-sans)", "Noto Sans CJK SC", "system-ui", "-apple-system", "sans-serif"],
         mono: ["ui-monospace", "monospace"],
       },
       fontSize: {
@@ -45,13 +43,19 @@ export default {
         title: ["18px", { lineHeight: "1.3", fontWeight: "700" }],
         display: ["24px", { lineHeight: "1.2", fontWeight: "700" }],
       },
-      spacing: {
-        sp1: "4px",
-        sp2: "8px",
-        sp3: "12px",
-        sp4: "16px",
-        sp6: "24px",
-        sp8: "32px",
+      transitionDuration: {
+        120: "120ms",
+      },
+      boxShadow: {
+        1: "0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.05)",
+        2: "0 4px 12px rgba(0, 0, 0, 0.10)",
+        3: "0 12px 32px rgba(0, 0, 0, 0.16)",
+      },
+      zIndex: {
+        sticky: "40",
+        dropdown: "50",
+        modal: "100",
+        toast: "110",
       },
     },
   },

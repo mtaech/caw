@@ -2,7 +2,7 @@
   <button
     :class="
       cn(
-        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
         variant === 'default' &&
           'bg-primary text-background hover:bg-primary-hover',
         variant === 'ghost' && 'text-muted-foreground hover:text-foreground hover:bg-elevated-hover',

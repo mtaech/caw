@@ -11,31 +11,25 @@
 
     <!-- Right: window controls -->
     <div class="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        class="hover:bg-elevated-hover text-muted-foreground hover:text-foreground rounded-none"
+      <button
+        class="h-9 w-12 flex items-center justify-center text-muted-foreground hover:bg-elevated-hover hover:text-foreground transition-colors"
         @click="minimize"
       >
         <Minus class="w-3.5 h-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        class="hover:bg-elevated-hover text-muted-foreground hover:text-foreground rounded-none"
+      </button>
+      <button
+        class="h-9 w-12 flex items-center justify-center text-muted-foreground hover:bg-elevated-hover hover:text-foreground transition-colors"
         @click="toggleMaximize"
       >
         <Square v-if="!maximized" class="w-3.5 h-3.5" />
         <Minimize2 v-else class="w-3.5 h-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        class="hover:bg-red-500 hover:text-white text-muted-foreground rounded-none"
+      </button>
+      <button
+        class="h-9 w-12 flex items-center justify-center text-muted-foreground hover:bg-red-500 hover:text-white transition-colors"
         @click="closeWindow"
       >
         <X class="w-3.5 h-3.5" />
-      </Button>
+      </button>
     </div>
   </header>
 </template>
@@ -44,7 +38,6 @@
 import { ref, onMounted } from "vue";
 import { Minus, Square, Minimize2, X, Disc3 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import Button from "@/components/ui/Button.vue";
 
 const maximized = ref(false);
 

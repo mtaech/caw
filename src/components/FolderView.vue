@@ -1,25 +1,24 @@
 <template>
   <div class="h-full overflow-y-auto">
-    <!-- Breadcrumb / header -->
-    <div
-      v-if="currentPath"
-      class="flex items-center gap-2 px-6 pt-6 pb-3 border-b border-border"
-    >
-      <button
-        class="text-muted-foreground hover:text-foreground transition-colors"
-        @click="goUp"
-      >
-        <ChevronLeft class="w-4 h-4" />
-      </button>
-      <span class="text-body text-foreground">{{ currentLabel }}</span>
-    </div>
-    <div v-else class="px-6 pt-6 pb-3 border-b border-border">
-      <h1 class="text-title text-foreground">文件夹</h1>
+    <!-- Breadcrumb header -->
+    <div class="flex items-center gap-1 px-6 pt-6 pb-3 border-b border-border">
+      <Folder class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+      <template v-if="breadcrumbs.length">
+        <template v-for="(seg, i) in breadcrumbs" :key="seg.path">
+          <ChevronRight class="w-3.5 h-3.5 text-faint-foreground flex-shrink-0" />
+          <button
+            class="text-body transition-colors hover:text-primary truncate max-w-[200px]"
+            :class="i === breadcrumbs.length - 1 ? 'text-foreground font-medium' : 'text-muted-foreground'"
+            @click="openDir(seg.path)"
+          >{{ seg.label }}</button>
+        </template>
+      </template>
+      <h1 v-else class="text-title text-foreground">文件夹</h1>
     </div>
 
     <!-- Subdirectories -->
     <div v-if="subDirs.length > 0" class="px-6 pt-4 pb-2">
-      <p class="text-caption text-muted-foreground uppercase tracking-wider mb-2">
+      <p class="text-overline mb-2">
         文件夹（{{ subDirs.length }}）
       </p>
       <div class="space-y-0.5">
@@ -37,7 +36,7 @@
 
     <!-- Tracks in current folder -->
     <div v-if="folderTracks.length > 0" class="px-6 pt-4 pb-6">
-      <p class="text-caption text-muted-foreground uppercase tracking-wider mb-2">
+      <p class="text-overline mb-2">
         歌曲（{{ folderTracks.length }}）
       </p>
       <div class="space-y-0.5">
@@ -48,9 +47,13 @@
           :class="{ 'bg-primary/10': track.id === playback.currentTrackId }"
           @dblclick="playTrack(track.id)"
         >
-          <span class="text-body-sm text-muted-foreground w-6 text-right flex-shrink-0">
-            {{ playback.currentTrackId === track.id ? '♫' : idx + 1 }}
-          </span>
+          <div class="w-6 flex justify-center flex-shrink-0">
+            <Play
+              v-if="playback.currentTrackId === track.id"
+              class="w-3 h-3 text-primary fill-primary"
+            />
+            <span v-else class="text-body-sm text-faint-foreground">{{ idx + 1 }}</span>
+          </div>
           <div class="flex-1 min-w-0">
             <p class="text-body text-foreground truncate">{{ track.title }}</p>
           </div>
@@ -83,7 +86,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { Folder, FolderOpen, ChevronLeft } from "lucide-vue-next";
+import { Folder, FolderOpen, ChevronRight, Play } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
 import * as api from "@/lib/tauri";
 
@@ -108,9 +111,39 @@ onMounted(async () => {
   }
 });
 
-const currentLabel = computed(() => {
-  if (!props.currentPath) return "";
-  return props.currentPath.replace(/\/+$/, "").split("/").pop() || props.currentPath;
+/**
+ * Full clickable path segments for the breadcrumb. When the current path
+ * sits under a configured music root, the first segment is that root.
+ */
+const breadcrumbs = computed(() => {
+  const path = props.currentPath;
+  if (!path) return [];
+  const norm = path.replace(/\/+$/, "");
+  const root = musicRoots.value
+    .map((r) => r.replace(/\/+$/, ""))
+    .find((r) => norm === r || norm.startsWith(r + "/"));
+  const segments: { label: string; path: string }[] = [];
+  if (root) {
+    segments.push({ label: dirName(root), path: root });
+    const rest = norm.slice(root.length).replace(/^\/+/, "");
+    if (rest) {
+      let acc = root;
+      for (const part of rest.split("/")) {
+        if (!part) continue;
+        acc += "/" + part;
+        segments.push({ label: part, path: acc });
+      }
+    }
+  } else {
+    const parts = norm.replace(/^\/+$/, "").split("/");
+    let acc = "";
+    for (const part of parts) {
+      if (!part) continue;
+      acc += "/" + part;
+      segments.push({ label: part, path: acc });
+    }
+  }
+  return segments;
 });
 
 /**
@@ -188,26 +221,6 @@ function dirName(fullPath: string): string {
 
 function openDir(path: string) {
   emit("navigate", path);
-}
-
-function goUp() {
-  if (!props.currentPath) return;
-  const normalized = props.currentPath.replace(/\/+$/, "");
-  // If at a configured music root, go back to root view
-  if (musicRoots.value.some((r) => r.replace(/\/+$/, "") === normalized)) {
-    emit("navigate", null);
-    return;
-  }
-  if (normalized === "" || normalized === "/") {
-    emit("navigate", null);
-    return;
-  }
-  const slashIdx = normalized.lastIndexOf("/");
-  if (slashIdx <= 0) {
-    emit("navigate", "/");
-  } else {
-    emit("navigate", normalized.slice(0, slashIdx));
-  }
 }
 
 function playTrack(id: number) {

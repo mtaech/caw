@@ -24,9 +24,12 @@
     --primary: 142 64% 30%;         /* #1b7937 */
     --primary-hover: 142 64% 24%;   /* #155e2c hover 更深 */
 
-    /* Table striping — 亮底下用极淡灰条纹 */
-    --table-even: 0 0% 100%;        /* = background */
-    --table-odd: 240 6% 97%;        /* #f8f8f9 极淡灰条纹 */
+    /* Destructive — 亮底下偏正红，对比度达 AA */
+    --destructive: 0 72% 47%;       /* #c81e1e */
+    --destructive-hover: 0 72% 40%; /* #a81818 hover 更深 */
+
+    /* Focus ring — 复用 primary 绿 */
+    --ring: 142 64% 30%;            /* = primary */
 
     /* Overlay */
     --overlay: 0 0% 0% / 50%;
@@ -51,4 +54,37 @@
       "rlig" 1,
       "calt" 1;
   }
+}
+
+/* ── Reusable component utilities ─────────────────────────────────── */
+@layer components {
+  /* Overline label — 详情页“专辑/艺术家”、表头、分组标题 */
+  .text-overline {
+    @apply text-caption text-muted-foreground uppercase tracking-wider;
+  }
+}
+
+/* ── Dialog / overlay transitions ─────────────────────────────────── */
+.overlay-enter-active,
+.overlay-leave-active {
+  transition: opacity 0.15s ease;
+}
+.overlay-enter-from,
+.overlay-leave-to {
+  opacity: 0;
+}
+.pop-enter-active {
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.pop-leave-active {
+  transition:
+    opacity 0.1s ease,
+    transform 0.1s ease;
+}
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
 }

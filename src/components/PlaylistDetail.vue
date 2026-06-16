@@ -22,7 +22,7 @@
           <Pencil class="w-3.5 h-3.5" />
         </button>
         <button
-          class="px-2 py-1 rounded-md text-xs text-red-400 hover:text-red-300 hover:bg-elevated-hover transition-colors"
+          class="px-2 py-1 rounded-md text-xs text-destructive hover:text-destructive-hover hover:bg-destructive/10 transition-colors"
           @click="confirmDelete = true"
         >
           <Trash2 class="w-3.5 h-3.5" />
@@ -47,12 +47,17 @@
         <div
           v-for="(track, idx) in tracks"
           :key="track.id"
+          draggable="true"
           class="flex items-center gap-3 px-2 py-2 rounded-md cursor-pointer hover:bg-elevated-hover transition-colors group"
-          :class="{ 'bg-primary/10': track.id === playback.currentTrackId }"
+          :class="{ 'bg-primary/10': track.id === playback.currentTrackId, 'ring-1 ring-primary ring-inset': dropIndex === idx }"
           @dblclick="playTrack(track.id)"
+          @dragstart="onDragStart($event, idx)"
+          @dragover="onDragOver($event, idx)"
+          @drop="onDrop($event, idx)"
+          @dragend="onDragEnd"
         >
-          <!-- Drag handle (placeholder for reorder) -->
-          <GripVertical class="w-3.5 h-3.5 text-faint-foreground flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <!-- Drag handle -->
+          <GripVertical class="w-3.5 h-3.5 text-faint-foreground flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity" />
 
           <!-- Playing indicator -->
           <Play v-if="track.id === playback.currentTrackId && playback.isPlaying" class="w-3 h-3 text-primary fill-primary flex-shrink-0" />
@@ -69,7 +74,7 @@
           <!-- Duration + remove -->
           <span class="text-body-sm text-muted-foreground tabular-nums flex-shrink-0 mr-2">{{ fmt(track.duration_secs) }}</span>
           <button
-            class="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-all"
+            class="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
             @click.stop="removeTrack(track.id)"
           >
             <X class="w-3.5 h-3.5" />
@@ -89,18 +94,15 @@
     />
 
     <!-- Delete confirmation -->
-    <Teleport to="body">
-      <div v-if="confirmDelete" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-overlay" @click="confirmDelete = false" />
-        <div class="relative bg-elevated rounded-xl border border-border shadow-xl p-6 w-full max-w-sm mx-4 z-10">
-          <p class="text-body text-foreground mb-4">确定删除「{{ playlistName }}」？</p>
-          <div class="flex justify-end gap-2">
-            <button class="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors" @click="confirmDelete = false">取消</button>
-            <button class="px-3 py-1.5 rounded-md text-sm bg-red-500 text-white hover:opacity-90 transition-opacity" @click="handleDelete">删除</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <ConfirmDialog
+      :open="confirmDelete"
+      title="删除播放列表"
+      :description="`确定删除「${playlistName}」？`"
+      confirm-text="删除"
+      destructive
+      @close="confirmDelete = false"
+      @confirm="handleDelete"
+    />
   </div>
 </template>
 
@@ -110,7 +112,9 @@ import { ArrowLeft, Play, Pencil, Trash2, X, ListMusic, GripVertical } from "luc
 import { usePlaylistStore } from "@/stores/playlists";
 import { usePlaybackStore } from "@/stores/playback";
 import { useViewStore } from "@/stores/view";
+import type { TrackDto } from "@/lib/tauri";
 import PlaylistDialog from "@/components/PlaylistDialog.vue";
+import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 
 const plStore = usePlaylistStore();
 const playback = usePlaybackStore();
@@ -120,15 +124,57 @@ const editingName = ref(false);
 const editText = ref("");
 const confirmDelete = ref(false);
 
+// ── Drag-to-reorder ──
+const dragIndex = ref<number | null>(null);
+const dropIndex = ref<number | null>(null);
+
+function onDragStart(e: DragEvent, idx: number) {
+  dragIndex.value = idx;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(idx));
+  }
+}
+
+function onDragOver(e: DragEvent, idx: number) {
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  if (dragIndex.value !== null && dragIndex.value !== idx) {
+    dropIndex.value = idx;
+  }
+}
+
+async function onDrop(e: DragEvent, idx: number) {
+  e.preventDefault();
+  const from = dragIndex.value;
+  dragIndex.value = null;
+  dropIndex.value = null;
+  if (from === null || from === idx) return;
+  const pl = plStore.currentPlaylistId;
+  if (pl === null) return;
+  const trackId = tracks.value[from].id;
+  // Backend position is 1-indexed.
+  await plStore.reorder(pl, trackId, idx + 1);
+}
+
+function onDragEnd() {
+  dragIndex.value = null;
+  dropIndex.value = null;
+}
+
 const playlistName = computed(() => {
   const pl = plStore.playlists.find((p) => p.id === plStore.currentPlaylistId);
   return pl?.name ?? "未知播放列表";
 });
 
 const tracksLookup = computed(() => {
-  const lib = playback.library;
-  const ids = new Set(plStore.currentPlaylistTracks);
-  return lib.filter((t) => ids.has(t.id));
+  // currentPlaylistTracks is the ordered array of track IDs (playlist order).
+  // Map them back to track objects IN playlist order — filtering the library
+  // by membership would discard the order and make reorder appear to do nothing.
+  const byId = new Map(playback.library.map((t) => [t.id, t]));
+  return plStore.currentPlaylistTracks
+    .map((id) => byId.get(id))
+    .filter((t): t is TrackDto => Boolean(t));
 });
 
 // Override filteredTracks to show playlist tracks when in playlist detail

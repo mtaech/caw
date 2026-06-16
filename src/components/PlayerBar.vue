@@ -27,14 +27,11 @@
         <Button
           variant="ghost"
           size="icon-sm"
-          :class="{ 'text-primary': playback.shuffle || playback.repeat !== 'none' }"
-          :title="modeTitle"
-          @click="cyclePlayMode"
+          :class="{ 'text-primary': playback.shuffle }"
+          :title="playback.shuffle ? '关闭随机' : '随机播放'"
+          @click="playback.setShuffle(!playback.shuffle)"
         >
-          <Repeat1 v-if="playback.repeat === 'one'" class="w-4 h-4" />
-          <Shuffle v-else-if="playback.shuffle" class="w-4 h-4" />
-          <Repeat v-else-if="playback.repeat === 'all'" class="w-4 h-4" />
-          <ListOrdered v-else class="w-4 h-4" />
+          <Shuffle class="w-4 h-4" />
         </Button>
 
         <Button variant="ghost" size="icon-sm" @click="playback.prev()" title="上一首">
@@ -42,7 +39,7 @@
         </Button>
 
         <button
-          class="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:scale-105 transition-transform active:scale-95"
+          class="w-9 h-9 rounded-full bg-primary text-background flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-1"
           @click="playback.togglePlay()"
           title="播放/暂停"
         >
@@ -52,6 +49,17 @@
 
         <Button variant="ghost" size="icon-sm" @click="playback.next()" title="下一首">
           <SkipForward class="w-4 h-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          :class="{ 'text-primary': playback.repeat !== 'none' }"
+          :title="repeatTitle"
+          @click="cycleRepeat"
+        >
+          <Repeat1 v-if="playback.repeat === 'one'" class="w-4 h-4" />
+          <Repeat v-else class="w-4 h-4" />
         </Button>
       </div>
 
@@ -107,7 +115,6 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
-  ListOrdered,
   Volume1,
   Volume2,
   VolumeX,
@@ -130,28 +137,19 @@ function onVolume(val: number) {
   playback.setVolume(val);
 }
 
-const modeTitle = computed(() => {
-  if (playback.repeat === "all" && !playback.shuffle) return "列表播放";
-  if (playback.repeat === "none" && !playback.shuffle) return "顺序播放";
-  if (playback.repeat === "one") return "单曲播放";
-  return "随机播放";
+const repeatTitle = computed(() => {
+  if (playback.repeat === "one") return "单曲循环";
+  if (playback.repeat === "all") return "列表循环";
+  return "顺序播放";
 });
 
-function cyclePlayMode() {
-  if (playback.repeat === "all" && !playback.shuffle) {
-    // 列表 → 顺序
-    playback.setRepeat("none");
-  } else if (playback.repeat === "none" && !playback.shuffle) {
-    // 顺序 → 单曲
+function cycleRepeat() {
+  if (playback.repeat === "none") {
+    playback.setRepeat("all");
+  } else if (playback.repeat === "all") {
     playback.setRepeat("one");
-  } else if (playback.repeat === "one") {
-    // 单曲 → 随机
-    playback.setShuffle(true);
-    playback.setRepeat("all");
   } else {
-    // 随机 → 列表
-    playback.setShuffle(false);
-    playback.setRepeat("all");
+    playback.setRepeat("none");
   }
 }
 </script>

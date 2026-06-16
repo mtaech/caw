@@ -3,9 +3,9 @@
     <!-- Search bar (only in data-browsing views, NOT in settings/placeholders) -->
     <div
       v-if="!view.detail && !showPlaylistDetail && view.nav !== 'settings' && view.nav !== 'folders' && view.nav !== 'playlists'"
-      class="flex items-center gap-2 px-4 py-2 border-b border-border flex-shrink-0"
+      class="flex items-center gap-2 px-4 py-2 border-b border-border flex-shrink-0 group"
     >
-      <Search class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+      <Search class="w-4 h-4 text-muted-foreground group-focus-within:text-primary flex-shrink-0 transition-colors" />
       <Input
         v-model="view.searchQuery"
         placeholder="搜索标题、艺术家或专辑……"

@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
+import { applyFont, getFontPreference, loadSystemFonts } from "@/lib/fonts";
 
 import TitleBar from "@/components/TitleBar.vue";
 import Sidebar from "@/components/Sidebar.vue";
@@ -14,6 +15,9 @@ useKeyboardShortcuts();
 
 const playback = usePlaybackStore();
 onMounted(async () => {
+  // Load font list from backend before applying the saved preference.
+  await loadSystemFonts();
+  applyFont(getFontPreference());
   await playback.init();
 });
 

@@ -7,7 +7,7 @@
       <TooltipContent
         :class="
           cn(
-            'z-50 rounded-md bg-foreground px-2.5 py-1.5 text-xs text-background shadow-md animate-in fade-in-0 zoom-in-95',
+            'z-dropdown rounded-md bg-foreground px-2.5 py-1.5 text-xs text-background shadow-2 animate-in fade-in-0 zoom-in-95',
             sideOffset ?? 4,
           )
         "

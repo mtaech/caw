@@ -215,3 +215,8 @@ export async function playNext(id: number): Promise<void> {
 export async function rescanAll(): Promise<void> {
   return invoke<void>("rescan_all");
 }
+
+/** Fetch all system-installed fonts (family names) from the Rust backend. */
+export async function getSystemFonts(): Promise<string[]> {
+  return invoke<string[]>("get_system_fonts");
+}

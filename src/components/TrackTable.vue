@@ -5,9 +5,9 @@
       <div
         v-for="col in columns"
         :key="col.key"
-        :style="{ width: col.width + 'px' }"
+        :style="col.key === 'title' ? { flex: '1 1 0%' } : { width: col.width + 'px' }"
         class="flex items-center gap-1 cursor-pointer select-none hover:text-foreground transition-colors"
-        :class="{ 'text-foreground': view.sortKey === col.key }"
+        :class="[col.key === 'title' ? 'min-w-0' : 'flex-shrink-0', { 'text-foreground': view.sortKey === col.key }]"
         @click="view.setSort(col.key as any)"
       >
         <span>{{ col.label }}</span>
@@ -30,7 +30,7 @@
         </Button>
         <div
           v-if="showBatchAddMenu"
-          class="absolute left-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-xl z-50 py-1"
+          class="absolute left-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-2 z-dropdown py-1"
         >
           <p v-if="plStore.playlists.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
             暂无播放列表
@@ -61,7 +61,7 @@
         <div
           v-for="row in virtualRows"
           :key="row.key"
-          class="flex items-center px-4 border-b border-border/40 transition-colors duration-120 cursor-pointer absolute top-0 left-0 w-full"
+          class="group flex items-center px-4 border-b border-border/40 transition-colors duration-120 cursor-pointer absolute top-0 left-0 w-full"
           :style="{
             height: row.size + 'px',
             transform: `translateY(${row.start}px)`,
@@ -93,16 +93,9 @@
             </span>
           </div>
 
-          <!-- Playing indicator bar -->
-          <div
-            v-if="row._track.id === playback.currentTrackId"
-            class="w-0.5 h-4 rounded-full bg-primary flex-shrink-0 mr-3"
-          />
-
           <!-- Title -->
           <div
-            class="truncate text-body"
-            :style="{ width: view.columnWidths.title + 'px' }"
+            class="truncate text-body flex-1 min-w-0"
             :class="{ 'text-body-md': row._track.id === playback.currentTrackId }"
           >
             {{ row._track.title }}
@@ -140,7 +133,7 @@
               <!-- Add-to-playlist dropdown -->
               <div
                 v-if="addMenuTrackId === row._track.id"
-                class="absolute right-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-xl z-50 py-1"
+                class="absolute right-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-2 z-dropdown py-1"
               >
                 <p v-if="plStore.playlists.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
                   暂无播放列表
@@ -165,7 +158,7 @@
   <!-- Context menu (right-click) -->
   <div
     v-if="contextMenu"
-    class="fixed z-[100] w-44 bg-elevated border border-border rounded-lg shadow-xl py-1"
+    class="fixed z-dropdown w-44 bg-elevated border border-border rounded-lg shadow-2 py-1"
     :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
     @click.stop
   >
@@ -190,7 +183,7 @@
       </button>
       <div
         v-if="showContextAddMenu"
-        class="absolute left-full top-0 ml-1 w-44 bg-elevated border border-border rounded-lg shadow-xl py-1 z-[101]"
+        class="absolute left-full top-0 ml-1 w-44 bg-elevated border border-border rounded-lg shadow-2 py-1 z-dropdown"
       >
         <p
           v-if="plStore.playlists.length === 0"
@@ -395,13 +388,4 @@ watch(
   () => { addMenuTrackId.value = null; }
 );
 
-// Re-measure when playing track changes (for the indicator)
-watch(
-  () => playback.currentTrackId,
-  () => {
-    if (virtualizer.value) {
-      virtualizer.value.measure();
-    }
-  },
-);
 </script>

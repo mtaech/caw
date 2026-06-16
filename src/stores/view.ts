@@ -6,7 +6,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { usePlaybackStore } from "./playback";
 
-export type NavItem = "all-music" | "artists" | "albums" | "playlists" | "folders";
+export type NavItem = "all-music" | "artists" | "albums" | "playlists" | "folders" | "settings";
 export type SortKey = "title" | "artist" | "album" | "duration";
 export type DetailTarget =
   | { type: "album"; name: string }

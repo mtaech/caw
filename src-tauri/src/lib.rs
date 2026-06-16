@@ -23,7 +23,7 @@ use crate::controller::{
 
 pub struct CawState {
     pub ctrl: Mutex<PlaybackController>,
-    pub music_dir: Mutex<Option<PathBuf>>,
+    pub music_dirs: Mutex<Vec<PathBuf>>,
     pub db: db::Database,
     pub mpris_tx: Mutex<Option<std::sync::mpsc::SyncSender<u32>>>,
 }
@@ -36,7 +36,7 @@ fn greet(name: &str) -> String {
     format!("Hello, {name}! Caw Tauri backend is alive.")
 }
 
-/// Open a native folder picker, persist the choice, and start scanning.
+/// Open a native folder picker, add the chosen dir to the list, and start scanning.
 ///
 /// MUST be `async` + `blocking_pick_folder()`: a sync command runs on the main
 /// thread, and `blocking_*` does `rx.recv()` on a rendezvous channel whose
@@ -58,55 +58,113 @@ async fn pick_music_folder(app: AppHandle, state: tauri::State<'_, CawState>) ->
     };
     let path = fp.into_path().unwrap();
     let path_str = path.to_string_lossy().to_string();
+    let path_buf = PathBuf::from(&path_str);
 
-    // Persist to store.
+    // Append to list (skip if already present).
+    {
+        let mut dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
+        if !dirs.contains(&path_buf) {
+            dirs.push(path_buf);
+        }
+    }
+
+    // Persist full list to store.
     {
         use tauri_plugin_store::StoreExt;
         if let Ok(store) = app.store("config.json") {
-            store.set(
-                "music_dir",
-                serde_json::Value::String(path_str.clone()),
-            );
+            let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
+            let arr: serde_json::Value = dirs.iter().map(|d| serde_json::Value::String(d.to_string_lossy().into_owned())).collect();
+            store.set("music_dirs", arr);
             let _ = store.save();
         }
     }
 
-    // Mark scanning and spawn background scan.
+    // Mark scanning and spawn background scan over ALL dirs.
     {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.scanning = true;
     }
 
     let h = app.clone();
+    let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?.clone();
     std::thread::spawn(move || {
-        scan_library(h, path);
+        scan_all_libraries(h, dirs);
     });
 
     Ok(Some(path_str))
 }
 
-/// Run a blocking library scan on a background thread.
-fn scan_library(app: AppHandle, path: PathBuf) {
+/// Return the list of configured music directories.
+#[tauri::command]
+fn get_music_dirs(state: tauri::State<CawState>) -> Vec<String> {
+    state.music_dirs.lock().unwrap().iter().map(|p| p.to_string_lossy().into_owned()).collect()
+}
+
+/// Remove a music directory from the list and re-scan.
+#[tauri::command]
+async fn remove_music_dir(app: AppHandle, state: tauri::State<'_, CawState>, path: String) -> Result<(), String> {
+    {
+        let mut dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
+        dirs.retain(|d| d.to_string_lossy().as_ref() != path.as_str());
+    }
+
+    // Persist updated list.
+    {
+        use tauri_plugin_store::StoreExt;
+        if let Ok(store) = app.store("config.json") {
+            let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
+            let arr: serde_json::Value = dirs.iter().map(|d| serde_json::Value::String(d.to_string_lossy().into_owned())).collect();
+            store.set("music_dirs", arr);
+            let _ = store.save();
+        }
+    }
+
+    // Re-scan remaining dirs.
+    let h = app.clone();
+    let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?.clone();
+    std::thread::spawn(move || {
+        if dirs.is_empty() {
+            let state = h.state::<CawState>();
+            let mut ctrl = state.ctrl.lock().unwrap();
+            ctrl.set_library(Vec::new());
+            ctrl.scanning = false;
+            let _ = h.emit("library_updated", serde_json::json!({}));
+        } else {
+            scan_all_libraries(h, dirs);
+        }
+    });
+
+    Ok(())
+}
+
+/// Run a blocking library scan over all configured directories on a background thread.
+/// Merges results deduped by path, then calls set_library once at the end.
+fn scan_all_libraries(app: AppHandle, dirs: Vec<PathBuf>) {
     let _ = app.emit("scan_progress", serde_json::json!({ "scanned": 0 }));
 
-    let tracks = match library::scan_directory(&path) {
-        Ok(t) => {
-            eprintln!("caw: scanned {} tracks from {:?}", t.len(), path);
-            t
+    let mut seen: std::collections::HashMap<PathBuf, std::sync::Arc<crate::models::track::Track>> = std::collections::HashMap::new();
+
+    for dir in &dirs {
+        match library::scan_directory(dir) {
+            Ok(tracks) => {
+                eprintln!("caw: scanned {} tracks from {:?}", tracks.len(), dir);
+                for t in tracks {
+                    seen.entry(t.path.clone()).or_insert(t);
+                }
+            }
+            Err(e) => {
+                eprintln!("caw: library scan error for {:?}: {}", dir, e);
+            }
         }
-        Err(e) => {
-            eprintln!("caw: library scan error: {}", e);
-            let state = app.state::<CawState>();
-            let mut ctrl = state.ctrl.lock().unwrap();
-            ctrl.scanning = false;
-            return;
-        }
-    };
+    }
+
+    let merged: Vec<std::sync::Arc<crate::models::track::Track>> = seen.into_values().collect();
+    eprintln!("caw: merged library has {} tracks (from {} dirs)", merged.len(), dirs.len());
 
     {
         let state = app.state::<CawState>();
         let mut ctrl = state.ctrl.lock().unwrap();
-        ctrl.set_library(tracks);
+        ctrl.set_library(merged);
         ctrl.scanning = false;
     }
 
@@ -353,30 +411,57 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .manage(CawState {
             ctrl: Mutex::new(PlaybackController::new()),
-            music_dir: Mutex::new(None),
+            music_dirs: Mutex::new(Vec::new()),
             db: db::Database::open(),
             mpris_tx: Mutex::new(None),
         })
         .setup(|app| {
-            // ── Restore persisted music_dir and start background scan ──
+            // ── Restore persisted music dirs and start background scan ──
             {
                 use tauri_plugin_store::StoreExt;
                 if let Ok(store) = app.store("config.json") {
-                    if let Some(val) = store.get("music_dir") {
-                        if let Some(path_str) = val.as_str() {
-                            if !path_str.is_empty() {
-                                let path = PathBuf::from(path_str);
-                                if path.exists() {
-                                    let state = app.state::<CawState>();
-                                    *state.music_dir.lock().unwrap() = Some(path.clone());
-
-                                    let h = app.handle().clone();
-                                    std::thread::spawn(move || {
-                                        scan_library(h, path);
-                                    });
+                    // Try new format: "music_dirs" as JSON array.
+                    let mut dirs: Vec<PathBuf> = Vec::new();
+                    if let Some(val) = store.get("music_dirs") {
+                        if let Some(arr) = val.as_array() {
+                            for v in arr {
+                                if let Some(s) = v.as_str() {
+                                    let p = PathBuf::from(s);
+                                    if p.exists() {
+                                        dirs.push(p);
+                                    }
                                 }
                             }
                         }
+                    }
+
+                    // Migration from old single-string "music_dir" format.
+                    if dirs.is_empty() {
+                        if let Some(val) = store.get("music_dir") {
+                            if let Some(path_str) = val.as_str() {
+                                if !path_str.is_empty() {
+                                    let p = PathBuf::from(path_str);
+                                    if p.exists() {
+                                        dirs.push(p);
+                                    }
+                                    // Migrate: write new key, delete old key, save.
+                                    let arr: serde_json::Value = dirs.iter().map(|d| serde_json::Value::String(d.to_string_lossy().into_owned())).collect();
+                                    store.set("music_dirs", arr);
+                                    store.delete("music_dir");
+                                    let _ = store.save();
+                                }
+                            }
+                        }
+                    }
+
+                    if !dirs.is_empty() {
+                        let state = app.state::<CawState>();
+                        *state.music_dirs.lock().unwrap() = dirs.clone();
+
+                        let h = app.handle().clone();
+                        std::thread::spawn(move || {
+                            scan_all_libraries(h, dirs);
+                        });
                     }
                 }
             }
@@ -448,6 +533,8 @@ pub fn run() {
             set_shuffle,
             set_repeat,
             pick_music_folder,
+            get_music_dirs,
+            remove_music_dir,
             list_playlists,
             get_playlist,
             create_playlist,

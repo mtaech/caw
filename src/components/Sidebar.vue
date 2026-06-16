@@ -74,7 +74,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Music, Users, Album, ListMusic, Folder, Plus } from "lucide-vue-next";
+import { Music, Users, Album, ListMusic, Folder, Plus, Settings } from "lucide-vue-next";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
 import PlaylistDialog from "@/components/PlaylistDialog.vue";
@@ -90,6 +90,7 @@ const navItems = [
   { id: "albums" as const, label: "专辑", icon: Album },
   { id: "playlists" as const, label: "播放列表", icon: ListMusic },
   { id: "folders" as const, label: "文件夹", icon: Folder },
+  { id: "settings" as const, label: "设置", icon: Settings },
 ];
 
 function onNav(id: any) {

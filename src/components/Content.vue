@@ -35,6 +35,7 @@
       <ArtistList v-else-if="view.nav === 'artists'" />
       <Placeholder v-else-if="view.nav === 'playlists'" title="播放列表" desc="在侧栏创建或选择一个播放列表" icon-type="playlists" />
       <Placeholder v-else-if="view.nav === 'folders'" title="文件夹浏览" desc="即将推出" icon-type="folders" />
+      <Settings v-else-if="view.nav === 'settings'" />
       <div v-else class="flex-1 flex items-center justify-center">
         <p class="text-muted-foreground">请选择一个视图</p>
       </div>
@@ -55,6 +56,7 @@ import ArtistDetail from "@/components/ArtistDetail.vue";
 import ArtistList from "@/components/ArtistList.vue";
 import PlaylistDetail from "@/components/PlaylistDetail.vue";
 import Placeholder from "@/components/Placeholder.vue";
+import Settings from "@/components/Settings.vue";
 
 const view = useViewStore();
 const plStore = usePlaylistStore();

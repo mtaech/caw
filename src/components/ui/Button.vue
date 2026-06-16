@@ -6,6 +6,7 @@
         variant === 'default' &&
           'bg-primary text-background hover:bg-primary-hover',
         variant === 'ghost' && 'text-muted-foreground hover:text-foreground hover:bg-elevated-hover',
+        variant === 'outline' && 'border border-border text-foreground hover:bg-elevated-hover',
         variant === 'icon' &&
           'text-muted-foreground hover:text-foreground hover:bg-elevated-hover',
         size === 'sm' && 'h-8 px-2 text-xs',
@@ -27,7 +28,7 @@
 import { cn } from "@/lib/utils";
 
 export interface ButtonProps {
-  variant?: "default" | "ghost" | "icon";
+  variant?: "default" | "ghost" | "icon" | "outline";
   size?: "sm" | "md" | "lg" | "icon-sm" | "icon-md";
   circle?: boolean;
 }

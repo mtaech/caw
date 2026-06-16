@@ -1,0 +1,17 @@
+# Caw — Local Music Player
+
+A pure-Rust desktop music player with a Tauri v2 + Vue 3 frontend. Backend
+handles audio playback (symphonia + cpal), library scanning, and a global
+controller that owns the queue/transport/auto-advance. Frontend is a pure view
+layer (Vue 3 + shadcn-vue + Tailwind).
+
+## Language
+
+**Nav item**:
+A first-class section in the sidebar that switches the main content view.
+Current items: 全部音乐, 艺术家, 专辑, 播放列表, 文件夹.
+_Avoid_: Tab, page, view mode
+
+**Settings**:
+A user-configurable panel that persists preferences (music directory, theme,
+audio output) via the backend store plugin.

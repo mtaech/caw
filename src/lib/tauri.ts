@@ -189,3 +189,13 @@ export function onPlaylistChanged(
     callback(event.payload);
   });
 }
+
+// ── Settings Commands ────────────────────────────────────────────────
+
+export async function getMusicDirs(): Promise<string[]> {
+  return invoke<string[]>("get_music_dirs");
+}
+
+export async function removeMusicDir(path: string): Promise<void> {
+  return invoke<void>("remove_music_dir", { path });
+}

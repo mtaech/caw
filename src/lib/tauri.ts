@@ -133,15 +133,15 @@ export async function deletePlaylist(id: number): Promise<void> {
 }
 
 export async function addToPlaylist(playlistId: number, trackIds: number[]): Promise<void> {
-  return invoke<void>("add_to_playlist", { playlist_id: playlistId, track_ids: trackIds });
+  return invoke<void>("add_to_playlist", { playlistId, trackIds });
 }
 
 export async function removeFromPlaylist(playlistId: number, trackIds: number[]): Promise<void> {
-  return invoke<void>("remove_from_playlist", { playlist_id: playlistId, track_ids: trackIds });
+  return invoke<void>("remove_from_playlist", { playlistId, trackIds });
 }
 
 export async function reorderPlaylist(playlistId: number, trackId: number, newPosition: number): Promise<void> {
-  return invoke<void>("reorder_playlist", { playlist_id: playlistId, track_id: trackId, new_position: newPosition });
+  return invoke<void>("reorder_playlist", { playlistId, trackId, newPosition });
 }
 
 // ─── Events ────────────────────────────────────────────────────────

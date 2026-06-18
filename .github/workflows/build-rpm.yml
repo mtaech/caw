@@ -20,7 +20,7 @@ jobs:
             artifact: caw-linux
           - os: windows-latest
             target: windows
-            bundles: "exe,msi"
+            bundles: "nsis,msi"
             artifact: caw-windows
 
     runs-on: ${{ matrix.os }}

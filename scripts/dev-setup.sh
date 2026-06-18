@@ -39,6 +39,7 @@ Icon=$ROOT/src-tauri/icons/icon.png
 Terminal=false
 Categories=Audio;Music;Player;
 StartupWMClass=Caw
+NoDisplay=true
 EOF
 echo "installed .desktop -> $DESKTOP_DEST"
 

@@ -1,21 +1,25 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, provide, ref } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { applyFont, getFontPreference, loadSystemFonts } from "@/lib/fonts";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import TitleBar from "@/components/TitleBar.vue";
 import Sidebar from "@/components/Sidebar.vue";
 import Content from "@/components/Content.vue";
 import PlayerBar from "@/components/PlayerBar.vue";
+import QueuePanel from "@/components/QueuePanel.vue";
 import Button from "@/components/ui/Button.vue";
 import { Disc3, FolderOpen } from "lucide-vue-next";
 
 useKeyboardShortcuts();
 
 const playback = usePlaybackStore();
+const showQueue = ref(false);
+provide("toggleQueue", () => { showQueue.value = !showQueue.value; });
+provide("showQueue", showQueue);
 onMounted(async () => {
-  // Load font list from backend before applying the saved preference.
   await loadSystemFonts();
   applyFont(getFontPreference());
   await playback.init();
@@ -31,10 +35,36 @@ async function handlePickFolder() {
     // library_updated event will re-fetch
   }
 }
+
+// ── Custom resize handles (needed because decorations: false) ──
+function startResize(dir: string) {
+  getCurrentWindow().startResizeDragging(dir as any);
+}
 </script>
 
 <template>
-  <div class="h-screen w-screen flex flex-col overflow-hidden bg-background select-none">
+  <div class="h-screen w-screen flex flex-col overflow-hidden bg-background select-none relative">
+    <!-- Resize handles (client-side, needed because decorations: false) -->
+    <!-- Edges → 4px thick invisible zones -->
+    <div class="absolute inset-0 pointer-events-none z-50">
+      <!-- Top edge -->
+      <div class="absolute top-0 left-1 right-1 h-1 pointer-events-auto cursor-n-resize" @mousedown="startResize('North')" />
+      <!-- Bottom edge -->
+      <div class="absolute bottom-0 left-1 right-1 h-1 pointer-events-auto cursor-s-resize" @mousedown="startResize('South')" />
+      <!-- Left edge -->
+      <div class="absolute left-0 top-1 bottom-1 w-1 pointer-events-auto cursor-w-resize" @mousedown="startResize('West')" />
+      <!-- Right edge -->
+      <div class="absolute right-0 top-1 bottom-1 w-1 pointer-events-auto cursor-e-resize" @mousedown="startResize('East')" />
+      <!-- Corner: top-left → nw-resize -->
+      <div class="absolute top-0 left-0 w-2 h-2 pointer-events-auto cursor-nw-resize" @mousedown="startResize('NorthWest')" />
+      <!-- Corner: top-right → ne-resize -->
+      <div class="absolute top-0 right-0 w-2 h-2 pointer-events-auto cursor-ne-resize" @mousedown="startResize('NorthEast')" />
+      <!-- Corner: bottom-left → sw-resize -->
+      <div class="absolute bottom-0 left-0 w-2 h-2 pointer-events-auto cursor-sw-resize" @mousedown="startResize('SouthWest')" />
+      <!-- Corner: bottom-right → se-resize -->
+      <div class="absolute bottom-0 right-0 w-2 h-2 pointer-events-auto cursor-se-resize" @mousedown="startResize('SouthEast')" />
+    </div>
+
     <!-- Custom title bar -->
     <TitleBar />
 
@@ -68,6 +98,7 @@ async function handlePickFolder() {
       <div class="flex-1 flex overflow-hidden">
         <Sidebar />
         <Content />
+        <QueuePanel :visible="showQueue" @close="showQueue = false" />
       </div>
       <PlayerBar />
     </template>

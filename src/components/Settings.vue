@@ -4,16 +4,19 @@ import { FolderOpen, FolderX, Music, RefreshCw, X, ChevronDown } from "lucide-vu
 import { SwitchRoot, SwitchThumb } from "radix-vue";
 import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { usePlaybackStore } from "@/stores/playback";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "@/components/ui/Button.vue";
 import { applyFont, getFontPreference, setFontPreference, getAvailableFonts, loadSystemFonts } from "@/lib/fonts";
 import type { FontOption } from "@/lib/fonts";
 import * as api from "@/lib/tauri";
 
+const playback = usePlaybackStore();
 const musicDirs = ref<string[]>([]);
 const loading = ref(true);
 const scanning = ref(false);
 const minimizeToTray = ref(false);
+const queueReplaceMode = ref(true);
 
 // ── Font preference ──
 const fontOptions = ref<FontOption[]>([
@@ -82,6 +85,9 @@ onMounted(async () => {
 
   try {
     minimizeToTray.value = await api.getMinimizeToTray();
+    try {
+      queueReplaceMode.value = await api.getQueueReplaceMode();
+    } catch {}
   } catch {}
   await loadDirs();
 
@@ -103,6 +109,16 @@ onUnmounted(() => {
   document.removeEventListener("click", onDocumentClick);
   for (const fn of unlisteners) fn();
 });
+
+async function handleQueueReplaceToggle(checked: boolean) {
+  queueReplaceMode.value = checked;
+  try {
+    await playback.setQueueReplaceMode(checked);
+  } catch (e) {
+    console.error("caw: failed to set queue replace mode", e);
+    queueReplaceMode.value = !checked;
+  }
+}
 
 async function handleMinimizeToggle(checked: boolean) {
   minimizeToTray.value = checked;
@@ -224,6 +240,19 @@ async function handleRemoveDir(path: string) {
         <SwitchRoot
           :checked="minimizeToTray"
           @update:checked="handleMinimizeToggle"
+          class="w-10 h-5 rounded-full data-[state=checked]:bg-primary data-[state=unchecked]:bg-border transition-colors duration-200 flex-shrink-0"
+        >
+          <SwitchThumb class="block w-4 h-4 rounded-full bg-foreground shadow mx-0.5 transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0" />
+        </SwitchRoot>
+      </div>
+      <div class="flex items-center justify-between px-4 py-3 rounded-lg bg-elevated border border-border">
+        <div class="space-y-0.5">
+          <p class="text-body text-foreground">替换当前播放队列</p>
+          <p class="text-body-sm text-muted-foreground">点击专辑/艺人/播放列表播放时替换当前队列，关闭则追加</p>
+        </div>
+        <SwitchRoot
+          :checked="queueReplaceMode"
+          @update:checked="handleQueueReplaceToggle"
           class="w-10 h-5 rounded-full data-[state=checked]:bg-primary data-[state=unchecked]:bg-border transition-colors duration-200 flex-shrink-0"
         >
           <SwitchThumb class="block w-4 h-4 rounded-full bg-foreground shadow mx-0.5 transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0" />

@@ -18,43 +18,6 @@
       </div>
     </div>
 
-    <!-- Batch action bar (multi-select) -->
-    <div
-      v-if="view.selectedTrackIds.size > 0"
-      class="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated flex-shrink-0"
-    >
-      <span class="text-body-sm text-foreground">已选 {{ view.selectedTrackIds.size }} 首</span>
-      <div class="relative">
-        <Button size="sm" variant="outline" @click="toggleBatchAddMenu($event)">
-          添加到播放列表
-        </Button>
-        <div
-          v-if="showBatchAddMenu"
-          class="absolute left-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-2 z-dropdown py-1"
-        >
-          <p v-if="plStore.playlists.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
-            暂无播放列表
-          </p>
-          <button
-            v-for="pl in plStore.playlists"
-            :key="pl.id"
-            class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate"
-            @click.stop="batchAddToPlaylist(pl.id)"
-          >
-            <ListMusic class="w-3 h-3 inline mr-2 text-muted-foreground" />
-            {{ pl.name }}
-          </button>
-        </div>
-      </div>
-      <button
-        class="ml-auto text-muted-foreground hover:text-foreground p-1"
-        @click="view.clearSelection()"
-        title="取消选择"
-      >
-        <X class="w-4 h-4" />
-      </button>
-    </div>
-
     <!-- Virtualized rows -->
     <div ref="parentRef" class="flex-1 overflow-auto">
       <div v-if="virtualizer" class="relative" :style="{ height: virtualizer.getTotalSize() + 'px' }">
@@ -68,7 +31,7 @@
           }"
           :class="rowClasses(row._track)"
           @dblclick="view.playTrackById(row._track.id)"
-          @click="handleRowClick(row._track.id, $event)"
+          @click="handleRowClick(row._track.id)"
           @contextmenu.prevent="showContextMenu(row._track, $event)"
         >
           <!-- # / now playing indicator -->
@@ -208,11 +171,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Play, ChevronUp, ChevronDown, Plus, ListMusic, ListOrdered, X } from "lucide-vue-next";
+import { Play, ChevronUp, ChevronDown, Plus, ListMusic, ListOrdered } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
-import Button from "@/components/ui/Button.vue";
 
 const playback = usePlaybackStore();
 const view = useViewStore();
@@ -271,12 +233,8 @@ function fmt(sec: number): string {
 }
 
 
-function handleRowClick(trackId: number, event: MouseEvent) {
+function handleRowClick(trackId: number) {
   view.setSelectedTrack(trackId);
-  view.selectTrack(trackId, {
-    ctrlKey: event.ctrlKey || event.metaKey,
-    shiftKey: event.shiftKey,
-  });
   addMenuTrackId.value = null;
   closeContextMenu();
 }
@@ -328,9 +286,10 @@ function playContextTrack() {
   closeContextMenu();
 }
 
-function playNextContextTrack() {
+async function playNextContextTrack() {
   if (contextMenu.value) {
-    playback.playNextTrack(contextMenu.value.track.id);
+    await playback.playNextTrack(contextMenu.value.track.id);
+    await playback.fetchQueueState();
   }
   closeContextMenu();
 }
@@ -350,22 +309,9 @@ async function addContextTrackToPlaylist(playlistId: number) {
   closeContextMenu();
 }
 
-// ── Batch bar (multi-select add to playlist) ──
-const showBatchAddMenu = ref(false);
-
-function toggleBatchAddMenu(_event: MouseEvent) {
-  showBatchAddMenu.value = !showBatchAddMenu.value;
-}
-
-function batchAddToPlaylist(playlistId: number) {
-  view.addSelectedToPlaylist(playlistId);
-  showBatchAddMenu.value = false;
-}
-
 // Close menus on click outside
 function onClickDocument() {
   closeContextMenu();
-  showBatchAddMenu.value = false;
 }
 
 onMounted(() => {

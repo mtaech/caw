@@ -19,7 +19,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   const shuffle = ref(false);
   const repeat = ref("none");
   const queue = ref<number[]>([]);
+  const history = ref<number[]>([]);
   const loading = ref(true);
+  const queueReplaceMode = ref(true);
 
   // ── Derived ──
 
@@ -94,6 +96,13 @@ export const usePlaybackStore = defineStore("playback", () => {
         if (p.done) loading.value = false;
       }),
     );
+
+    unlistens.push(
+      await api.onQueueChanged((p) => {
+        queue.value = p.queue;
+        currentTrackId.value = p.current_track_id;
+      }),
+    );
   }
 
   function unregisterListeners() {
@@ -121,6 +130,13 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
     loading.value = false;
     await registerListeners();
+
+    // Fetch history on startup
+    const qs = await api.getQueueState();
+    history.value = qs.history;
+
+    // Load queue replace mode
+    queueReplaceMode.value = await api.getQueueReplaceMode();
   }
 
   function cleanup() {
@@ -131,7 +147,11 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ── Transport actions ──
 
   async function playTracks(ids: number[], startId: number) {
-    await api.playTracks(ids, startId);
+    if (queueReplaceMode.value) {
+      await api.playTracks(ids, startId);
+    } else {
+      await api.playTracksInsert(ids, startId);
+    }
   }
 
   async function playNextTrack(id: number) {
@@ -183,6 +203,34 @@ export const usePlaybackStore = defineStore("playback", () => {
     return null;
   }
 
+  // ── Queue actions ──
+
+  async function addToQueue(id: number) {
+    await api.addToQueue(id);
+  }
+
+  async function removeFromQueue(index: number) {
+    await api.removeFromQueue(index);
+  }
+
+  async function reorderQueue(from: number, to: number) {
+    await api.reorderQueue(from, to);
+  }
+
+  async function clearQueue() {
+    await api.clearQueue();
+  }
+
+  async function saveQueueAsPlaylist(name: string) {
+    return await api.saveQueueAsPlaylist(name);
+  }
+
+  async function fetchQueueState() {
+    const state = await api.getQueueState();
+    queue.value = state.queue;
+    history.value = state.history;
+  }
+
   return {
     library,
     currentTrackId,
@@ -209,5 +257,17 @@ export const usePlaybackStore = defineStore("playback", () => {
     setShuffle,
     setRepeat,
     pickMusicFolder,
+    history,
+    addToQueue,
+    removeFromQueue,
+    reorderQueue,
+    clearQueue,
+    saveQueueAsPlaylist,
+    fetchQueueState,
+    queueReplaceMode,
+    async setQueueReplaceMode(enabled: boolean) {
+      queueReplaceMode.value = enabled;
+      await api.setQueueReplaceMode(enabled);
+    },
   };
 });

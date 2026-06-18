@@ -14,14 +14,14 @@ use crate::CawState;
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let play_pause =
-        MenuItemBuilder::with_id("play_pause", "Play/Pause").build(app)?;
-    let next = MenuItemBuilder::with_id("next", "Next").build(app)?;
+        MenuItemBuilder::with_id("play_pause", "播放 / 暂停").build(app)?;
+    let next = MenuItemBuilder::with_id("next", "下一首").build(app)?;
     let previous =
-        MenuItemBuilder::with_id("previous", "Previous").build(app)?;
+        MenuItemBuilder::with_id("previous", "上一首").build(app)?;
     let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
     let show_hide =
-        MenuItemBuilder::with_id("show_hide", "Show/Hide").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+        MenuItemBuilder::with_id("show_hide", "显示 / 隐藏").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show_hide)

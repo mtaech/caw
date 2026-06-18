@@ -28,6 +28,7 @@ pub struct CawState {
     pub db: db::Database,
     pub mpris_tx: Mutex<Option<std::sync::mpsc::SyncSender<u32>>>,
     pub minimize_to_tray: Mutex<bool>,
+    pub queue_replace_mode: Mutex<bool>,
 }
 
 // ── Commands ───────────────────────────────────────────────────────
@@ -117,6 +118,28 @@ async fn set_minimize_to_tray(app: AppHandle, state: tauri::State<'_, CawState>,
     use tauri_plugin_store::StoreExt;
     if let Ok(store) = app.store("config.json") {
         store.set("minimize_to_tray", serde_json::Value::Bool(enable));
+        let _ = store.save();
+    }
+    Ok(())
+}
+
+/// Return whether queue replace mode is enabled.
+#[tauri::command]
+fn get_queue_replace_mode(state: tauri::State<CawState>) -> bool {
+    *state.queue_replace_mode.lock().unwrap()
+}
+
+/// Enable or disable queue replace mode.
+#[tauri::command]
+async fn set_queue_replace_mode(app: AppHandle, state: tauri::State<'_, CawState>, enabled: bool) -> Result<(), String> {
+    {
+        let mut v = state.queue_replace_mode.lock().map_err(|e| e.to_string())?;
+        *v = enabled;
+    }
+    // Persist
+    use tauri_plugin_store::StoreExt;
+    if let Ok(store) = app.store("config.json") {
+        store.set("queue_replace_mode", serde_json::Value::Bool(enabled));
         let _ = store.save();
     }
     Ok(())
@@ -257,15 +280,96 @@ fn play_tracks(
     Ok(())
 }
 
-/// Insert a track right after the current queue position and play it.
+/// Insert tracks into the queue after the current position and start playing.
 #[tauri::command]
-fn play_next(app: AppHandle, state: tauri::State<CawState>, id: u64) -> Result<(), String> {
+fn play_tracks_insert(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    ids: Vec<u64>,
+    start_id: u64,
+) -> Result<(), String> {
     let job = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
-        ctrl.prepare_play_next(id)
+        ctrl.prepare_play_tracks_insert(ids, start_id)
     };
     controller::execute_decode_job(job, &state.ctrl, &app);
     Ok(())
+}
+
+/// Insert a track into the queue without switching playback.
+#[tauri::command]
+fn play_next(app: AppHandle, state: tauri::State<CawState>, id: u64) -> Result<(), String> {
+    let dto = {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.prepare_play_next(id);
+        ctrl.state_dto()
+    };
+    let _ = app.emit("queue_changed", &dto);
+    Ok(())
+}
+
+#[tauri::command]
+fn add_to_queue(app: AppHandle, state: tauri::State<CawState>, id: u64) -> Result<(), String> {
+    let dto = {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.add_to_queue(id);
+        ctrl.state_dto()
+    };
+    let _ = app.emit("queue_changed", &dto);
+    Ok(())
+}
+
+#[tauri::command]
+fn remove_from_queue(app: AppHandle, state: tauri::State<CawState>, index: usize) -> Result<(), String> {
+    let dto = {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.remove_from_queue(index);
+        ctrl.state_dto()
+    };
+    let _ = app.emit("queue_changed", &dto);
+    Ok(())
+}
+
+#[tauri::command]
+fn reorder_queue(app: AppHandle, state: tauri::State<CawState>, from: usize, to: usize) -> Result<(), String> {
+    let dto = {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.reorder_queue(from, to);
+        ctrl.state_dto()
+    };
+    let _ = app.emit("queue_changed", &dto);
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_queue(app: AppHandle, state: tauri::State<CawState>) -> Result<(), String> {
+    let dto = {
+        let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.clear_queue();
+        ctrl.state_dto()
+    };
+    let _ = app.emit("queue_changed", &dto);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_queue_state(state: tauri::State<CawState>) -> serde_json::Value {
+    let ctrl = state.ctrl.lock().unwrap();
+    serde_json::json!({
+        "queue": ctrl.state_dto().queue,
+        "current_track_id": ctrl.current_track_id,
+        "history": ctrl.history.clone(),
+    })
+}
+
+#[tauri::command]
+fn save_queue_as_playlist(app: AppHandle, state: tauri::State<CawState>, name: String) -> Result<i64, String> {
+    let id = {
+        let ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
+        ctrl.save_queue_as_playlist(&state.db, &name).map_err(|e| e.to_string())?
+    };
+    let _ = app.emit("playlist_changed", serde_json::json!({}));
+    Ok(id)
 }
 
 /// Toggle between Playing / Paused / Stopped->Playing.
@@ -521,6 +625,7 @@ pub fn run() {
             db: db::Database::open(),
             mpris_tx: Mutex::new(None),
             minimize_to_tray: Mutex::new(false),
+            queue_replace_mode: Mutex::new(true), // default: replace mode on
         })
         .setup(|app| {
             // ── Restore persisted music dirs and start background scan ──
@@ -599,6 +704,18 @@ pub fn run() {
                 }
             }
 
+            // ── Read persisted queue_replace_mode setting ──
+            {
+                use tauri_plugin_store::StoreExt;
+                if let Ok(store) = app.store("config.json") {
+                    if let Some(val) = store.get("queue_replace_mode") {
+                        if let Some(b) = val.as_bool() {
+                            *app.state::<CawState>().queue_replace_mode.lock().unwrap() = b;
+                        }
+                    }
+                }
+            }
+
             // ── Position tick + auto-advance task ──
             let tick_handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -655,7 +772,14 @@ pub fn run() {
             get_cover,
             get_state,
             play_tracks,
+            play_tracks_insert,
             play_next,
+            add_to_queue,
+            remove_from_queue,
+            reorder_queue,
+            clear_queue,
+            get_queue_state,
+            save_queue_as_playlist,
             toggle_play,
             pause,
             resume,
@@ -671,6 +795,8 @@ pub fn run() {
             remove_music_dir,
             get_minimize_to_tray,
             set_minimize_to_tray,
+            get_queue_replace_mode,
+            set_queue_replace_mode,
             rescan_all,
             list_playlists,
             get_playlist,

@@ -13,11 +13,12 @@
     "windows": [
       {
         "title": "Caw",
-        "width": 1200,
+        "width": 1400,
         "height": 800,
         "minWidth": 900,
         "minHeight": 600,
         "decorations": false,
+        "resizable": true,
         "transparent": false,
         "dragDropEnabled": false
       }

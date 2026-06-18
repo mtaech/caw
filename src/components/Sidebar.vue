@@ -1,18 +1,37 @@
 <template>
-  <aside class="w-60 flex-shrink-0 bg-sidebar flex flex-col border-r border-border">
-    <!-- Section label -->
-    <p class="text-overline px-3 pt-4 pb-1">资料库</p>
+  <aside
+    class="flex-shrink-0 bg-sidebar flex flex-col border-r border-border transition-all duration-200 overflow-hidden relative"
+    :class="collapsed ? 'w-14' : 'w-48'"
+  >
+    <!-- Collapse toggle -->
+    <button
+      class="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-elevated-hover transition-colors z-10"
+      :class="collapsed ? 'mx-auto mt-2' : 'absolute top-2 right-2'"
+      :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
+      @click="collapsed = !collapsed"
+    >
+      <PanelLeftClose v-if="!collapsed" class="w-4 h-4" />
+      <PanelLeftOpen v-else class="w-4 h-4" />
+    </button>
+
+    <!-- Section label (hidden when collapsed) -->
+    <p
+      v-if="!collapsed"
+      class="text-overline px-3 pt-4 pb-1"
+    >资料库</p>
     <!-- Nav items -->
-    <nav class="flex flex-col gap-0.5 px-2 pb-2">
+    <nav class="flex flex-col gap-0.5 px-2 pb-2" :class="collapsed ? 'pt-2' : ''">
       <button
         v-for="item in navItems"
         :key="item.id"
         class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-120 relative text-left"
-        :class="
+        :class="[
           view.nav === item.id
             ? 'bg-elevated text-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-elevated-hover'
-        "
+            : 'text-muted-foreground hover:text-foreground hover:bg-elevated-hover',
+          collapsed ? 'justify-center' : ''
+        ]"
+        :title="collapsed ? item.label : undefined"
         @click="onNav(item.id)"
       >
         <div
@@ -20,44 +39,46 @@
           class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full"
         />
         <component :is="item.icon" class="w-4 h-4 flex-shrink-0" />
-        <span>{{ item.label }}</span>
+        <span v-if="!collapsed">{{ item.label }}</span>
       </button>
     </nav>
 
-    <!-- Saved playlists (under 播放列表) -->
-    <div
-      v-if="view.nav === ('playlists' as string) || (plStore.playlists.length > 0 && view.nav !== ('playlists' as string))"
-      class="border-t border-border mx-3 my-1"
-    />
-    <div v-if="plStore.playlists.length > 0 && view.nav === ('playlists' as string)" class="flex-1 overflow-auto px-2">
+    <!-- Saved playlists (hidden when collapsed) -->
+    <template v-if="!collapsed">
       <div
-        v-for="pl in plStore.playlists"
-        :key="pl.id"
-        class="flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors duration-120 group"
-        :class="
-          pl.id === plStore.currentPlaylistId
-            ? 'bg-elevated text-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-elevated-hover'
-        "
-        @click="plStore.openPlaylist(pl.id)"
-      >
-        <ListMusic class="w-3.5 h-3.5 flex-shrink-0" />
-        <span class="truncate flex-1">{{ pl.name }}</span>
-        <span class="text-caption text-faint-foreground flex-shrink-0">{{ pl.trackCount }}</span>
+        v-if="view.nav === ('playlists' as string) || (plStore.playlists.length > 0 && view.nav !== ('playlists' as string))"
+        class="border-t border-border mx-3 my-1"
+      />
+      <div v-if="plStore.playlists.length > 0 && view.nav === ('playlists' as string)" class="flex-1 overflow-auto px-2">
+        <div
+          v-for="pl in plStore.playlists"
+          :key="pl.id"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors duration-120 group"
+          :class="
+            pl.id === plStore.currentPlaylistId
+              ? 'bg-elevated text-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-elevated-hover'
+          "
+          @click="plStore.openPlaylist(pl.id)"
+        >
+          <ListMusic class="w-3.5 h-3.5 flex-shrink-0" />
+          <span class="truncate flex-1">{{ pl.name }}</span>
+          <span class="text-caption text-faint-foreground flex-shrink-0">{{ pl.trackCount }}</span>
+        </div>
       </div>
-    </div>
+    </template>
 
     <!-- Bottom controls -->
-    <div class="px-3 py-3 border-t border-border flex flex-col gap-2">
+    <div class="px-3 py-3 border-t border-border flex flex-col gap-2" :class="collapsed ? 'items-center px-1' : ''">
       <button
-        v-if="view.nav === ('playlists' as string)"
+        v-if="!collapsed && view.nav === ('playlists' as string)"
         class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-elevated-hover transition-colors"
         @click="showCreateDialog = true"
       >
         <Plus class="w-4 h-4" />
         <span>新建播放列表</span>
       </button>
-      <p class="text-caption text-faint-foreground">
+      <p v-if="!collapsed" class="text-caption text-faint-foreground">
         {{ view.filteredTracks.length }} tracks
       </p>
     </div>
@@ -76,7 +97,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Music, Users, Album, ListMusic, Folder, Plus, Settings } from "lucide-vue-next";
+import { Music, Users, Album, ListMusic, Folder, Plus, Settings, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
 import PlaylistDialog from "@/components/PlaylistDialog.vue";
@@ -85,6 +106,7 @@ const view = useViewStore();
 const plStore = usePlaylistStore();
 
 const showCreateDialog = ref(false);
+const collapsed = ref(false);
 
 const navItems = [
   { id: "all-music" as const, label: "全部音乐", icon: Music },

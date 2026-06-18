@@ -220,3 +220,58 @@ export async function rescanAll(): Promise<void> {
 export async function getSystemFonts(): Promise<string[]> {
   return invoke<string[]>("get_system_fonts");
 }
+
+// ─── Queue Commands ──────────────────────────────────────────────────
+
+export async function addToQueue(id: number): Promise<void> {
+  return invoke<void>("add_to_queue", { id });
+}
+
+export async function removeFromQueue(index: number): Promise<void> {
+  return invoke<void>("remove_from_queue", { index });
+}
+
+export async function reorderQueue(from: number, to: number): Promise<void> {
+  return invoke<void>("reorder_queue", { from, to });
+}
+
+export async function clearQueue(): Promise<void> {
+  return invoke<void>("clear_queue");
+}
+
+export interface QueueStateDto {
+  queue: number[];
+  current_track_id: number | null;
+  history: number[];
+}
+
+export async function getQueueState(): Promise<QueueStateDto> {
+  return invoke<QueueStateDto>("get_queue_state");
+}
+
+export async function saveQueueAsPlaylist(name: string): Promise<number> {
+  return invoke<number>("save_queue_as_playlist", { name });
+}
+
+/** Queue change event listener */
+export function onQueueChanged(
+  callback: (payload: PlayerStateDto) => void,
+): Promise<UnlistenFn> {
+  return listen<PlayerStateDto>("queue_changed", (event) => {
+    callback(event.payload);
+  });
+}
+
+// ─── Queue Replace Mode ──────────────────────────────────────────
+
+export async function playTracksInsert(ids: number[], startId: number): Promise<void> {
+  return invoke<void>("play_tracks_insert", { ids, startId });
+}
+
+export async function getQueueReplaceMode(): Promise<boolean> {
+  return invoke<boolean>("get_queue_replace_mode");
+}
+
+export async function setQueueReplaceMode(enabled: boolean): Promise<void> {
+  return invoke<void>("set_queue_replace_mode", { enabled });
+}

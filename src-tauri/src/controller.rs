@@ -47,6 +47,8 @@ pub struct PlaybackController {
     pub scanning: bool,
     /// Guards against double-processing a natural track end.
     ended_track_handled: bool,
+    /// History of recently played track IDs (most recent first).
+    pub history: Vec<u64>,
 }
 
 impl PlaybackController {
@@ -64,6 +66,7 @@ impl PlaybackController {
             last_volume: 0.8,
             scanning: false,
             ended_track_handled: false,
+            history: Vec::new(),
         };
         ctrl.sync_player_volume();
         ctrl
@@ -83,6 +86,7 @@ impl PlaybackController {
         self.current_track_id = None;
         self.state = CtrlState::Stopped;
         self.ended_track_handled = false;
+        self.history.clear();
     }
 
     pub fn find_track(&self, id: u64) -> Option<&Arc<Track>> {
@@ -121,20 +125,47 @@ impl PlaybackController {
         }
     }
 
-    /// Insert a track right after the current queue position and play it.
-    /// If nothing is playing or queue is empty, prepend to the front.
+    /// Insert a track into the queue without switching playback.
+    /// If nothing is playing, insert at end; otherwise insert right after current.
     pub fn prepare_play_next(&mut self, id: u64) -> DecodeJob {
         let insert_pos = match self.queue_index {
-            Some(i) if i + 1 < self.queue.len() => i + 1,
-            _ => self.queue.len(),
+            Some(i) => i + 1,
+            None => self.queue.len(),
         };
         self.queue.insert(insert_pos, id);
-        self.queue_index = Some(insert_pos);
-        self.current_track_id = Some(id);
+        DecodeJob::None
+    }
+
+    /// Insert a batch of tracks right after the current queue position and play them.
+    /// Original queue after the batch is preserved.
+    pub fn prepare_play_tracks_insert(&mut self, ids: Vec<u64>, start_id: u64) -> DecodeJob {
+        if ids.is_empty() {
+            return DecodeJob::None;
+        }
+        let insert_pos = match self.queue_index {
+            Some(i) => i + 1,
+            None => self.queue.len(),
+        };
+        // Push old track to history before switching
+        if let Some(old_id) = self.current_track_id {
+            let first_new = ids.first().copied();
+            if first_new != Some(old_id) {
+                self.push_history(old_id);
+            }
+        }
+        // Insert all new IDs at insert_pos
+        for (offset, id) in ids.iter().enumerate() {
+            self.queue.insert(insert_pos + offset, *id);
+        }
+        let start_offset = ids.iter().position(|&id| id == start_id).unwrap_or(0);
+        let start_idx = insert_pos + start_offset;
+        self.queue_index = Some(start_idx);
+        self.current_track_id = Some(start_id);
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
-        match self.find_track_path(id) {
-            Some(path) => DecodeJob::Play { path, id },
+        self.shuffle = false; // Explicit queue overrides shuffle
+        match self.find_track_path(start_id) {
+            Some(path) => DecodeJob::Play { path, id: start_id },
             None => DecodeJob::None,
         }
     }
@@ -343,10 +374,28 @@ impl PlaybackController {
     // ── Apply decoded audio ──
 
     pub fn apply_decoded(&mut self, decoded: DecodedAudio, id: u64) {
+        if let Some(old_id) = self.current_track_id {
+            if old_id != id {
+                self.push_history(old_id);
+            }
+        }
         self.current_track_id = Some(id);
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
         let _ = self.player().send(PlayerCommand::Play(decoded, 0.0));
+    }
+
+    // ── History ──
+
+    pub fn push_history(&mut self, id: u64) {
+        if self.history.first() != Some(&id) {
+            self.history.insert(0, id);
+            self.history.truncate(200);
+        }
+    }
+
+    pub fn clear_history(&mut self) {
+        self.history.clear();
     }
 
     // ── Position helper ──
@@ -364,6 +413,72 @@ impl PlaybackController {
     }
 
     // ── Queue helpers ──
+
+    pub fn add_to_queue(&mut self, id: u64) {
+        self.queue.push(id);
+    }
+
+    pub fn remove_from_queue(&mut self, index: usize) {
+        if index >= self.queue.len() {
+            return;
+        }
+        // Don't allow removing currently playing track.
+        if let Some(qi) = self.queue_index {
+            if index == qi {
+                return;
+            }
+        }
+        self.queue.remove(index);
+        if let Some(ref mut qi) = self.queue_index {
+            if index < *qi {
+                *qi -= 1;
+            }
+        }
+    }
+
+    pub fn reorder_queue(&mut self, from: usize, to: usize) {
+        if from >= self.queue.len() || to >= self.queue.len() {
+            return;
+        }
+        if from == to {
+            return;
+        }
+        let id = self.queue.remove(from);
+        self.queue.insert(to, id);
+        if let Some(ref mut qi) = self.queue_index {
+            if from < *qi && to >= *qi {
+                *qi -= 1;
+            } else if from > *qi && to <= *qi {
+                *qi += 1;
+            } else if from == *qi {
+                *qi = to;
+            }
+        }
+    }
+
+    pub fn clear_queue(&mut self) {
+        if let Some(qi) = self.queue_index {
+            let id = self.queue[qi];
+            self.queue = vec![id];
+            self.queue_index = Some(0);
+        } else {
+            self.queue.clear();
+            self.queue_index = None;
+        }
+    }
+
+    pub fn save_queue_as_playlist(
+        &self,
+        db: &crate::db::Database,
+        name: &str,
+    ) -> anyhow::Result<i64> {
+        let id = db.create_playlist(name)?;
+        if !self.queue.is_empty() {
+            let track_ids: Vec<i64> = self.queue.iter().map(|&id| id as i64).collect();
+            db.add_tracks(id, &track_ids)?;
+        }
+        Ok(id)
+    }
 
     fn build_shuffle_queue(&mut self) {
         if self.queue.len() <= 1 {

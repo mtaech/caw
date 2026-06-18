@@ -30,7 +30,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install Linux system dependencies
         if: matrix.target == 'linux'
@@ -59,7 +59,7 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
@@ -71,7 +71,7 @@ jobs:
         run: npx tauri build --bundles ${{ matrix.bundles }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -87,15 +87,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           pattern: caw-*
           merge-multiple: true
           path: bundles
 
-      - name: List bundles
-        run: ls -la bundles/
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: bundles/*
+      - name: Attach bundles to Release
+        run: |
+          ls -la bundles/
+          gh release create "${{ github.ref_name }}" --latest --title "${{ github.ref_name }}" --generate-notes || true
+          gh release upload "${{ github.ref_name }}" bundles/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

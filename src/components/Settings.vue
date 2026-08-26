@@ -335,7 +335,7 @@ onUnmounted(() => {
           </div>
           <div>
             <h3 class="text-base font-bold text-foreground">Caw Music Player</h3>
-            <p class="text-xs text-muted-foreground mt-0.5">版本 0.2.0 · 纯 Rust 音频引擎驱动</p>
+            <p class="text-xs text-muted-foreground mt-0.5">版本 0.3.3 · 纯 Rust 音频引擎驱动</p>
           </div>
         </div>
 

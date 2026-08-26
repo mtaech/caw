@@ -186,7 +186,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto p-8 select-none max-w-3xl mx-auto space-y-8">
+  <div class="h-full overflow-y-auto select-none">
+    <div class="max-w-3xl mx-auto p-8 space-y-8">
     <!-- Header -->
     <div>
       <h1 class="text-display font-bold text-foreground tracking-tight">偏好设置</h1>
@@ -345,6 +346,7 @@ onUnmounted(() => {
         </div>
       </div>
     </section>
+    </div>
   </div>
 
   <!-- Virtualized Font Picker Dropdown Modal / Portal -->

@@ -26,16 +26,19 @@
           :speed="30"
           :pause-on-hover="true"
         />
-        <MarqueeText
-          class="text-xs text-muted-foreground"
-          :text="
+        <p
+          class="text-xs text-muted-foreground truncate"
+          :title="
             playback.currentTrack
               ? playback.currentTrack.artist + (playback.currentTrack.album ? ' · ' + playback.currentTrack.album : '')
               : 'Caw 音乐播放器'
           "
-          :speed="24"
-          :pause-on-hover="true"
-        />
+        >
+          <span v-if="playback.currentTrack">
+            {{ playback.currentTrack.artist }}{{ playback.currentTrack.album ? ' · ' + playback.currentTrack.album : '' }}
+          </span>
+          <span v-else>Caw 音乐播放器</span>
+        </p>
       </div>
     </div>
 

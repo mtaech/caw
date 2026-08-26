@@ -771,22 +771,42 @@ pub fn run() {
         .setup(|app| {
             crate::log_info!("caw: starting up — directory unified at {:?}", crate::paths::caw_dir());
 
-            // ── Resolution-aware window sizing (2K: 1600x1200; 1080p: 1200x900) ──
+            // ── Resolution-aware window sizing & precise centering ──
             if let Some(window) = app.get_webview_window("main") {
-                if let Ok(Some(monitor)) = window.current_monitor() {
-                    let size = monitor.size();
+                let monitor_opt = window
+                    .current_monitor()
+                    .ok()
+                    .flatten()
+                    .or_else(|| window.primary_monitor().ok().flatten());
+
+                if let Some(monitor) = monitor_opt {
+                    let mon_pos = monitor.position();
+                    let mon_size = monitor.size();
                     let scale_factor = monitor.scale_factor();
-                    let screen_w = size.width as f64 / scale_factor;
-                    let screen_h = size.height as f64 / scale_factor;
 
-                    // Scale relative to 2K (2560x1440 baseline: 1600x1200)
+                    let screen_w = mon_size.width as f64 / scale_factor;
+                    let screen_h = mon_size.height as f64 / scale_factor;
+
+                    // Scale relative to 2K (2560x1440 baseline: 1600x1200, aspect 4:3)
                     // On 1080p (1920x1080), scale is 0.75 -> 1200x900
-                    let scale = (screen_w / 2560.0).min(screen_h / 1440.0).clamp(0.6, 1.5);
-                    let target_w = (1600.0 * scale).round();
-                    let target_h = (1200.0 * scale).round();
+                    let scale = (screen_w / 2560.0).min(screen_h / 1440.0).clamp(0.5, 1.5);
+                    let target_w = (1600.0 * scale).min(screen_w * 0.92).round();
+                    let target_h = (1200.0 * scale).min(screen_h * 0.90).round();
 
-                    let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
-                    let _ = window.center();
+                    // Convert to physical coordinates to avoid GTK/X11 rounding offsets
+                    let phys_w = (target_w * scale_factor).round() as u32;
+                    let phys_h = (target_h * scale_factor).round() as u32;
+
+                    let target_x = mon_pos.x + ((mon_size.width as i64 - phys_w as i64) / 2) as i32;
+                    let target_y = mon_pos.y + ((mon_size.height as i64 - phys_h as i64) / 2) as i32;
+
+                    crate::log_info!(
+                        "caw: window sizing - monitor: {}x{}, scale: {}, target: {}x{} at ({}, {})",
+                        mon_size.width, mon_size.height, scale_factor, phys_w, phys_h, target_x, target_y
+                    );
+
+                    let _ = window.set_size(tauri::PhysicalSize::new(phys_w, phys_h));
+                    let _ = window.set_position(tauri::PhysicalPosition::new(target_x, target_y));
                 }
             }
 

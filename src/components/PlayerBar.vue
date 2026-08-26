@@ -20,15 +20,22 @@
       </div>
       
       <div class="min-w-0 flex-1 flex flex-col justify-center gap-0.5 pr-2">
-        <p class="text-sm font-semibold text-foreground truncate">
-          {{ playback.currentTrack?.title ?? "未在播放" }}
-        </p>
-        <p class="text-xs text-muted-foreground truncate">
-          <span v-if="playback.currentTrack">
-            {{ playback.currentTrack.artist }}{{ playback.currentTrack.album ? ' · ' + playback.currentTrack.album : '' }}
-          </span>
-          <span v-else>Caw 音乐播放器</span>
-        </p>
+        <MarqueeText
+          class="text-sm font-semibold text-foreground"
+          :text="playback.currentTrack?.title ?? '未在播放'"
+          :speed="30"
+          :pause-on-hover="true"
+        />
+        <MarqueeText
+          class="text-xs text-muted-foreground"
+          :text="
+            playback.currentTrack
+              ? playback.currentTrack.artist + (playback.currentTrack.album ? ' · ' + playback.currentTrack.album : '')
+              : 'Caw 音乐播放器'
+          "
+          :speed="24"
+          :pause-on-hover="true"
+        />
       </div>
     </div>
 
@@ -172,6 +179,7 @@ import { computed, inject, type Ref, ref } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
 import Slider from "@/components/ui/Slider.vue";
 import CoverArt from "@/components/CoverArt.vue";
+import MarqueeText from "@/components/MarqueeText.vue";
 import { formatDuration } from "@/lib/utils";
 import {
   Play,

@@ -174,6 +174,7 @@
           <div
             class="truncate text-body flex-1 min-w-0 pl-3 font-medium"
             :class="{ 'text-primary font-semibold': row._track.id === playback.currentTrackId }"
+            :title="row._track.title"
           >
             {{ row._track.title }}
           </div>
@@ -182,6 +183,7 @@
           <div
             class="truncate text-body-sm text-muted-foreground hover:text-foreground flex-shrink-0 pl-3 transition-colors"
             :style="{ width: view.columnWidths.artist + 'px' }"
+            :title="row._track.artist"
             @click.stop="view.openArtist(row._track.artist)"
           >
             {{ row._track.artist }}
@@ -191,6 +193,7 @@
           <div
             class="truncate text-body-sm text-muted-foreground hover:text-foreground flex-shrink-0 pl-3 transition-colors"
             :style="{ width: view.columnWidths.album + 'px' }"
+            :title="row._track.album"
             @click.stop="view.openAlbum(row._track.album)"
           >
             {{ row._track.album }}

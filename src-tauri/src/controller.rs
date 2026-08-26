@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter};
 
-use crate::audio::decoder::{decode_file, DecodedAudio};
+use crate::audio::decoder::{DecodedAudio, decode_file};
 use crate::audio::player::{Player, PlayerCommand};
 use crate::models::playlist::RepeatMode;
 use crate::models::track::Track;
@@ -98,7 +98,8 @@ impl PlaybackController {
     }
 
     pub fn current_track_path(&self) -> Option<PathBuf> {
-        self.current_track_id.and_then(|id| self.find_track_path(id))
+        self.current_track_id
+            .and_then(|id| self.find_track_path(id))
     }
 
     pub fn current_track_duration(&self) -> f64 {
@@ -187,7 +188,10 @@ impl PlaybackController {
                     self.queue_index = Some(0);
                     self.current_track_id = self.queue.first().copied();
                 }
-                match self.current_track_id.and_then(|id| self.find_track_path(id)) {
+                match self
+                    .current_track_id
+                    .and_then(|id| self.find_track_path(id))
+                {
                     Some(path) => {
                         let id = self.current_track_id.unwrap();
                         self.state = CtrlState::Playing;
@@ -227,7 +231,10 @@ impl PlaybackController {
     pub fn prepare_prev(&mut self) -> DecodeJob {
         // If more than 3 seconds in, restart current track.
         if self.position_secs() > 3.0 {
-            match self.current_track_id.and_then(|id| self.find_track_path(id)) {
+            match self
+                .current_track_id
+                .and_then(|id| self.find_track_path(id))
+            {
                 Some(path) => {
                     let id = self.current_track_id.unwrap();
                     self.state = CtrlState::Playing;
@@ -277,20 +284,22 @@ impl PlaybackController {
         }
 
         // Natural end: was playing, is_playing flipped to false, frames at end.
-        if self.state == CtrlState::Playing && total_frames > 0 && pos_frames >= total_frames && !self.ended_track_handled
+        if self.state == CtrlState::Playing
+            && total_frames > 0
+            && pos_frames >= total_frames
+            && !self.ended_track_handled
         {
             self.ended_track_handled = true;
             self.state = CtrlState::Stopped;
 
             // Repeat One → restart same track.
-            if self.repeat == RepeatMode::One {
-                if let Some(id) = self.current_track_id {
-                    if let Some(path) = self.find_track_path(id) {
-                        self.state = CtrlState::Playing;
-                        self.ended_track_handled = false;
-                        return DecodeJob::Play { path, id };
-                    }
-                }
+            if self.repeat == RepeatMode::One
+                && let Some(id) = self.current_track_id
+                && let Some(path) = self.find_track_path(id)
+            {
+                self.state = CtrlState::Playing;
+                self.ended_track_handled = false;
+                return DecodeJob::Play { path, id };
             }
 
             // Otherwise advance to next track (honouring repeat/shuffle).
@@ -326,9 +335,7 @@ impl PlaybackController {
     }
 
     fn sync_player_volume(&mut self) {
-        let _ = self
-            .player()
-            .send(PlayerCommand::SetVolume(self.volume));
+        let _ = self.player().send(PlayerCommand::SetVolume(self.volume));
     }
 
     pub fn set_volume(&mut self, vol: f32) {
@@ -360,7 +367,10 @@ impl PlaybackController {
             let mut entries: Vec<(u64, String, u32)> = self
                 .queue
                 .iter()
-                .filter_map(|id| self.find_track(*id).map(|t| (*id, t.album.clone(), t.track_number)))
+                .filter_map(|id| {
+                    self.find_track(*id)
+                        .map(|t| (*id, t.album.clone(), t.track_number))
+                })
                 .collect();
             entries.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
             self.queue = entries.into_iter().map(|(id, _, _)| id).collect();
@@ -374,10 +384,10 @@ impl PlaybackController {
     // ── Apply decoded audio ──
 
     pub fn apply_decoded(&mut self, decoded: DecodedAudio, id: u64) {
-        if let Some(old_id) = self.current_track_id {
-            if old_id != id {
-                self.push_history(old_id);
-            }
+        if let Some(old_id) = self.current_track_id
+            && old_id != id
+        {
+            self.push_history(old_id);
         }
         self.current_track_id = Some(id);
         self.state = CtrlState::Playing;
@@ -423,16 +433,16 @@ impl PlaybackController {
             return;
         }
         // Don't allow removing currently playing track.
-        if let Some(qi) = self.queue_index {
-            if index == qi {
-                return;
-            }
+        if let Some(qi) = self.queue_index
+            && index == qi
+        {
+            return;
         }
         self.queue.remove(index);
-        if let Some(ref mut qi) = self.queue_index {
-            if index < *qi {
-                *qi -= 1;
-            }
+        if let Some(ref mut qi) = self.queue_index
+            && index < *qi
+        {
+            *qi -= 1;
         }
     }
 

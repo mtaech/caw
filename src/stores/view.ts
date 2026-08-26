@@ -8,11 +8,43 @@ import { usePlaybackStore } from "./playback";
 import { usePlaylistStore } from "./playlists";
 
 export type NavItem = "all-music" | "artists" | "albums" | "playlists" | "folders" | "settings";
-export type SortKey = "title" | "artist" | "album" | "duration";
+export type SortKey = "track_number" | "title" | "artist" | "album" | "duration";
 export type DetailTarget =
   | { type: "album"; name: string }
   | { type: "artist"; name: string }
   | null;
+
+export interface ColumnWidths {
+  index: number;
+  artist: number;
+  album: number;
+  duration: number;
+}
+
+export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
+  index: 40,
+  artist: 240,
+  album: 240,
+  duration: 80,
+};
+
+const STORAGE_KEY_COLUMNS = "caw:column-widths";
+
+function getInitialColumnWidths(): ColumnWidths {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_COLUMNS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        index: typeof parsed.index === "number" ? parsed.index : DEFAULT_COLUMN_WIDTHS.index,
+        artist: typeof parsed.artist === "number" ? parsed.artist : DEFAULT_COLUMN_WIDTHS.artist,
+        album: typeof parsed.album === "number" ? parsed.album : DEFAULT_COLUMN_WIDTHS.album,
+        duration: typeof parsed.duration === "number" ? parsed.duration : DEFAULT_COLUMN_WIDTHS.duration,
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_COLUMN_WIDTHS };
+}
 
 export const useViewStore = defineStore("view", () => {
   const nav = ref<NavItem>("all-music");
@@ -72,13 +104,20 @@ export const useViewStore = defineStore("view", () => {
     }
     clearSelection();
   }
-  const columnWidths = ref({
-    index: 40,
-    title: 400,
-    artist: 240,
-    album: 240,
-    duration: 80,
-  });
+  const columnWidths = ref<ColumnWidths>(getInitialColumnWidths());
+
+  function saveColumnWidths() {
+    try {
+      localStorage.setItem(STORAGE_KEY_COLUMNS, JSON.stringify(columnWidths.value));
+    } catch (e) {
+      console.error("caw: failed to save column widths", e);
+    }
+  }
+
+  function resetColumnWidths() {
+    columnWidths.value = { ...DEFAULT_COLUMN_WIDTHS };
+    saveColumnWidths();
+  }
 
   const playback = computed(() => usePlaybackStore());
 
@@ -293,5 +332,7 @@ export const useViewStore = defineStore("view", () => {
     setSelectedTrack,
     playAll,
     playTrackById,
+    saveColumnWidths,
+    resetColumnWidths,
   };
 });

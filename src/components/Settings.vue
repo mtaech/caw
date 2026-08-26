@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { useVirtualizer } from "@tanstack/vue-virtual";
 import { FolderOpen, FolderX, Music, RefreshCw, X, ChevronDown } from "lucide-vue-next";
 import { SwitchRoot, SwitchThumb } from "radix-vue";
 import { listen } from "@tauri-apps/api/event";
@@ -46,6 +47,30 @@ const filteredFonts = computed(() => {
   return fontOptions.value.filter((o) => o.label.toLowerCase().includes(q));
 });
 
+// Virtualized font list. The picker can hold thousands of families, and each
+// row previews itself in its own font-family — rendering them all forces the
+// engine to load and rasterize every installed font at once, which froze the
+// dropdown on open. Only the visible rows are mounted now.
+const fontListRef = ref<HTMLElement | null>(null);
+
+const fontVirtualizerOptions = computed(() => ({
+  count: filteredFonts.value.length,
+  getScrollElement: () => fontListRef.value,
+  estimateSize: () => 36,
+  overscan: 8,
+}));
+
+const fontVirtualizer = useVirtualizer(fontVirtualizerOptions);
+
+const virtualFontRows = computed(() => {
+  const v = fontVirtualizer.value;
+  if (!v) return [];
+  return v.getVirtualItems().map((item: any) => ({
+    ...item,
+    _font: filteredFonts.value[item.index],
+  }));
+});
+
 function toggleFontPicker() {
   if (fontPickerOpen.value) {
     fontPickerOpen.value = false;
@@ -57,6 +82,9 @@ function toggleFontPicker() {
     dropdownTop.value = r.bottom + 4;
   }
   fontPickerOpen.value = true;
+  // The scroll element only exists once the dropdown is mounted, so the
+  // virtualizer has nothing to measure until the next tick.
+  nextTick(() => fontVirtualizer.value?.measure());
 }
 
 function selectFont(id: string) {
@@ -64,6 +92,15 @@ function selectFont(id: string) {
   fontPickerOpen.value = false;
   fontSearch.value = "";
 }
+
+// Filtering changes the row count; jump back to the top so the visible
+// window matches the new result set instead of a stale offset.
+watch(fontSearch, () => {
+  nextTick(() => {
+    if (fontListRef.value) fontListRef.value.scrollTop = 0;
+    fontVirtualizer.value?.measure();
+  });
+});
 
 function onDocumentClick(e: MouseEvent) {
   if (!fontPickerOpen.value) return;
@@ -293,26 +330,36 @@ async function handleRemoveDir(path: string) {
                 />
               </div>
 
-              <!-- Options list -->
-              <div class="overflow-y-auto max-h-60 py-1">
-                <button
-                  v-for="opt in filteredFonts"
-                  :key="opt.id"
-                  class="w-full flex items-center px-3 py-2 text-sm text-left hover:bg-elevated-hover transition-colors"
-                  :class="{ 'bg-primary/10': opt.id === currentFont }"
-                  :style="{ fontFamily: opt.fontFamily || undefined }"
-                  @click.stop="selectFont(opt.id)"
-                >
-                  {{ opt.label }}
-                </button>
+       <!-- Options list (virtualized: see fontVirtualizer) -->
+              <div ref="fontListRef" class="overflow-y-auto max-h-60 py-1">
+      <div
+     v-if="fontVirtualizer && filteredFonts.length"
+           class="relative w-full"
+      :style="{ height: fontVirtualizer.getTotalSize() + 'px' }"
+              >
+  <button
+     v-for="row in virtualFontRows"
+      :key="row.key"
+           class="absolute top-0 left-0 w-full flex items-center px-3 text-sm text-left hover:bg-elevated-hover transition-colors"
+      :class="{ 'bg-primary/10': row._font.id === currentFont }"
+    :style="{
+          height: row.size + 'px',
+transform: `translateY(${row.start}px)`,
+  fontFamily: row._font.fontFamily || undefined,
+       }"
+      @click.stop="selectFont(row._font.id)"
+                  >
+      {{ row._font.label }}
+  </button>
+          </div>
 
-                <div
-                  v-if="filteredFonts.length === 0"
-                  class="px-3 py-6 text-sm text-muted-foreground text-center"
-                >
-                  未找到匹配字体
-                </div>
-              </div>
+              <div
+          v-if="filteredFonts.length === 0"
+       class="px-3 py-6 text-sm text-muted-foreground text-center"
+              >
+   未找到匹配字体
+     </div>
+            </div>
 
               <!-- Footer -->
               <div

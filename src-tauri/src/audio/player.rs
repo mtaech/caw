@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender};
@@ -86,108 +86,35 @@ impl Player {
     }
 
     fn run_loop(rx: Receiver<PlayerCommand>, state: SharedState) {
-        let host = cpal::default_host();
-
-        let Some(device) = host.default_output_device() else {
-            eprintln!("caw: no audio output device available");
-            Self::drain_commands(rx);
-            return;
-        };
-
-        let Ok(stream_config) = device.default_output_config() else {
-            eprintln!("caw: failed to get default output config");
-            Self::drain_commands(rx);
-            return;
-        };
-
-        let sample_rate = stream_config.sample_rate();
-        let channels: u16 = stream_config.channels();
-
-        // Shared audio buffer for the CPAL callback to read from.
+        // Shared PCM buffer the CPAL callback reads from.
         let shared_audio: Arc<std::sync::RwLock<AudioStreamState>> =
             Arc::new(std::sync::RwLock::new(AudioStreamState {
                 samples: Vec::new(),
-                position: 0,
                 source_channels: 2,
                 source_rate: 44100,
             }));
 
-        let shared_audio_cb = shared_audio.clone();
-        let state_cb = state.clone();
+        // Fractional read cursor in *source* frames, shared lock-free with the
+        // CPAL callback (f64 bits in an AtomicU64). It must be fractional because
+        // the source and device rates usually differ (44.1kHz file -> 48kHz device).
+        let cursor = Arc::new(AtomicU64::new(0));
 
-        let Ok(stream) = device.build_output_stream(
-            stream_config.config(),
-            move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-                let is_playing = state_cb.is_playing.load(Ordering::Relaxed);
-                if !is_playing {
-                    for s in data.iter_mut() {
-                        *s = 0.0;
-                    }
-                    return;
-                }
-
-                let vol = state_cb.volume.load(Ordering::Relaxed) as f32 / 1000.0;
-                let guard = match shared_audio_cb.read() {
-                    Ok(g) => g,
-                    Err(_) => return,
-                };
-
-                let src_channels = guard.source_channels as usize;
-                let total_src_frames = guard.samples.len() / src_channels;
-                let src_pos = guard.position;
-
-                // Advance position
-                let out_channels = channels as usize;
-                let out_frames = data.len() / out_channels;
-                let frames_to_copy = out_frames.min(total_src_frames.saturating_sub(src_pos));
-
-                let mut src_idx = src_pos * src_channels;
-                let mut out_idx = 0;
-
-                for _ in 0..frames_to_copy {
-                    let mut sample: f32 = 0.0;
-                    for ch in 0..src_channels.min(guard.samples.len().saturating_sub(src_idx)) {
-                        sample += guard.samples[src_idx + ch];
-                    }
-                    sample = sample / src_channels.max(1) as f32 * vol;
-
-                    for ch in 0..out_channels.min(data.len().saturating_sub(out_idx)) {
-                        data[out_idx + ch] = sample;
-                    }
-                    out_idx += out_channels;
-                    src_idx += src_channels;
-                }
-
-                // Fill remaining with silence
-                for s in data.iter_mut().skip(out_idx) {
-                    *s = 0.0;
-                }
-
-                // Advance playback position
-                let new_pos = src_pos + frames_to_copy;
-                state_cb.position_frames.store(new_pos, Ordering::Relaxed);
-                // Also update RwLock position so next callback starts from here
-                drop(guard);
-                if let Ok(mut wguard) = shared_audio_cb.write() {
-                    wguard.position = new_pos;
-                }
-                // If track finished, stop playing
-                if total_src_frames > 0 && new_pos >= total_src_frames {
-                    state_cb.is_playing.store(false, Ordering::Relaxed);
-                }
-            },
-            |err| eprintln!("caw: audio output error: {}", err),
-            None,
-        ) else {
-            eprintln!("caw: failed to build output stream");
+        let Some(open) = Self::open_stream(&shared_audio, &cursor, &state) else {
+            eprintln!("caw: no usable audio output device — playback disabled");
             Self::drain_commands(rx);
             return;
         };
+        let OpenStream {
+            stream,
+            sample_rate: out_rate,
+            channels: out_channels,
+            device_name,
+        } = open;
 
         stream.play().ok();
         eprintln!(
-            "caw: audio output stream started ({}Hz, {}ch)",
-            sample_rate, channels
+            "caw: audio output stream started on '{}' ({}Hz, {}ch)",
+            device_name, out_rate, out_channels
         );
 
         // Command processing loop
@@ -195,29 +122,29 @@ impl Player {
             match cmd {
                 PlayerCommand::Play(audio, seek_pos) => {
                     let src_rate = audio.sample_rate;
-                    let src_ch = audio.channels;
+                    let src_ch = audio.channels.max(1);
                     let total_frames = audio.samples.len() / src_ch as usize;
 
                     state.total_frames.store(total_frames, Ordering::Relaxed);
 
-                    let seek_frames = if seek_pos > 0.0 {
-                        (seek_pos * src_rate as f64 * src_ch as f64) as usize
-                    } else {
-                        0
-                    };
-                    let clamped_seek = seek_frames.min(audio.samples.len());
+                    let start_frame = (seek_pos.max(0.0) * src_rate as f64)
+                        .min(total_frames as f64)
+                        .floor();
 
                     {
-                        let mut guard = shared_audio.write().unwrap();
+                        let mut guard = match shared_audio.write() {
+                            Ok(g) => g,
+                            Err(poisoned) => poisoned.into_inner(),
+                        };
                         guard.samples = audio.samples;
-                        guard.position = clamped_seek / src_ch as usize;
                         guard.source_channels = src_ch;
                         guard.source_rate = src_rate;
                     }
 
+                    cursor.store(start_frame.to_bits(), Ordering::Relaxed);
                     state
                         .position_frames
-                        .store(clamped_seek / src_ch as usize, Ordering::Relaxed);
+                        .store(start_frame as usize, Ordering::Relaxed);
                     state.is_playing.store(true, Ordering::Relaxed);
                 }
                 PlayerCommand::Pause => {
@@ -230,21 +157,24 @@ impl Player {
                     state.is_playing.store(false, Ordering::Relaxed);
                     state.position_frames.store(0, Ordering::Relaxed);
                     state.total_frames.store(0, Ordering::Relaxed);
-                    let mut guard = shared_audio.write().unwrap();
-                    guard.samples.clear();
-                    guard.position = 0;
+                    cursor.store(0f64.to_bits(), Ordering::Relaxed);
+                    if let Ok(mut guard) = shared_audio.write() {
+                        guard.samples.clear();
+                    }
                 }
                 PlayerCommand::Seek(pos) => {
                     if let Ok(guard) = shared_audio.read() {
-                        let src_ch = guard.source_channels as usize;
+                        let src_ch = guard.source_channels.max(1) as usize;
                         let src_rate = guard.source_rate;
-                        let seek_frames = (pos * src_rate as f64) as usize * src_ch;
-                        let clamped = seek_frames.min(guard.samples.len());
-                        let frame_pos = clamped / src_ch;
-                        state.position_frames.store(frame_pos, Ordering::Relaxed);
+                        let total_frames = guard.samples.len() / src_ch;
+                        let frame = (pos.max(0.0) * src_rate as f64)
+                            .min(total_frames as f64)
+                            .floor();
                         drop(guard);
-                        let mut guard = shared_audio.write().unwrap();
-                        guard.position = frame_pos;
+                        cursor.store(frame.to_bits(), Ordering::Relaxed);
+                        state
+                            .position_frames
+                            .store(frame as usize, Ordering::Relaxed);
                     }
                 }
                 PlayerCommand::SetVolume(vol) => {
@@ -259,6 +189,250 @@ impl Player {
         }
     }
 
+    /// Try to open an output stream, falling back across devices.
+    ///
+    /// The default ALSA PCM is frequently unusable on Linux: without the
+    /// `pipewire-alsa` / `libasound2-plugins` bridge, `default` resolves to a
+    /// `dmix` plugin on whichever card is first (often an unplugged HDMI output),
+    /// and `snd_pcm_dmix_open` fails with "unable to open slave". Previously that
+    /// killed the audio thread outright and every later command was silently
+    /// dropped, so the UI showed "playing" with no sound. Now we walk the
+    /// enumerated devices until one actually opens.
+    /// ALSA card id (e.g. "TypeC") backing the sound server's default sink.
+    ///
+    /// Only used to *rank* fallback candidates. ALSA on its own has no idea
+    /// which sink the user picked, so without this the fallback can happily
+    /// open some unrelated HDMI or onboard card and appear silent. Returns
+    /// `None` when pactl is unavailable — ranking then falls back to names.
+    fn default_sink_card() -> Option<String> {
+        use std::process::Command;
+
+        let out = Command::new("pactl")
+            .arg("get-default-sink")
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let sink = String::from_utf8(out.stdout).ok()?.trim().to_string();
+        if sink.is_empty() {
+            return None;
+        }
+
+        // Find that sink in `pactl list sinks` and read its `alsa.id` property,
+        // which is exactly the CARD= token cpal reports in its device ids.
+        let list = Command::new("pactl")
+            .args(["list", "sinks"])
+            .output()
+            .ok()?;
+        if !list.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&list.stdout);
+
+        let mut in_target = false;
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if let Some(name) = trimmed.strip_prefix("Name: ") {
+                in_target = name.trim() == sink;
+                continue;
+            }
+            if in_target && let Some(v) = trimmed.strip_prefix("alsa.id = ") {
+                return Some(v.trim().trim_matches('"').to_string());
+            }
+        }
+        None
+    }
+
+    fn open_stream(
+        shared_audio: &Arc<std::sync::RwLock<AudioStreamState>>,
+        cursor: &Arc<AtomicU64>,
+        state: &SharedState,
+    ) -> Option<OpenStream> {
+        let host = cpal::default_host();
+
+        let mut candidates: Vec<cpal::Device> = Vec::new();
+        if let Some(dev) = host.default_output_device() {
+            candidates.push(dev);
+        }
+        match host.output_devices() {
+            Ok(devs) => candidates.extend(devs),
+            Err(e) => eprintln!("caw: failed to enumerate output devices: {}", e),
+        }
+
+        // The compositor/sound-server default sink is the device the user
+        // actually chose; prefer whichever ALSA card backs it.
+        let preferred_card = Self::default_sink_card();
+        if let Some(ref card) = preferred_card {
+            eprintln!(
+                "caw: preferred output card from default sink: CARD={}",
+                card
+            );
+        }
+
+        // Rank by device id, which on ALSA carries the PCM name ("plughw:CARD=..").
+        // "null" discards audio silently, so it must never be chosen.
+        let mut ranked: Vec<(i32, String, cpal::Device)> = candidates
+            .into_iter()
+            .filter_map(|dev| {
+                let id = dev
+                    .id()
+                    .map(|i| i.to_string())
+                    .unwrap_or_else(|_| "<unknown>".into());
+                let mut score = match id.as_str() {
+                    n if n.ends_with(":null") || n.contains(":null:") => return None,
+                    n if n.contains("pipewire") => 0,
+                    n if n.contains("pulse") => 1,
+                    n if n.ends_with(":default") => 2,
+                    n if n.contains("sysdefault") => 3,
+                    n if n.contains("plughw:") => 4,
+                    n if n.contains("front:") => 5,
+                    n if n.contains("hw:") => 6,
+                    // dmix is what fails in the broken-default case; try it last.
+                    n if n.contains("dmix") => 9,
+                    _ => 7,
+                };
+                // Strongly prefer the card backing the default sink, so we do not
+                // fall back onto some unrelated (often silent) HDMI or onboard card.
+                if let Some(ref card) = preferred_card
+                    && id.contains(&format!("CARD={}", card))
+                {
+                    score -= 20;
+                }
+                Some((score, id, dev))
+            })
+            .collect();
+        ranked.sort_by_key(|(score, _, _)| *score);
+
+        let mut seen: Vec<String> = Vec::new();
+        for (_, name, device) in ranked {
+            if seen.contains(&name) {
+                continue;
+            }
+            seen.push(name.clone());
+
+            let config = match device.default_output_config() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("caw: device '{}' has no usable config: {}", name, e);
+                    continue;
+                }
+            };
+
+            let out_rate = config.sample_rate();
+            let out_channels = config.channels();
+            let shared_cb = shared_audio.clone();
+            let cursor_cb = cursor.clone();
+            let state_cb = state.clone();
+
+            let built = device.build_output_stream(
+                config.config(),
+                move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+                    Self::fill(
+                        data,
+                        out_channels,
+                        out_rate,
+                        &shared_cb,
+                        &cursor_cb,
+                        &state_cb,
+                    );
+                },
+                |err| eprintln!("caw: audio output error: {}", err),
+                None,
+            );
+
+            match built {
+                Ok(stream) => {
+                    return Some(OpenStream {
+                        stream,
+                        sample_rate: out_rate,
+                        channels: out_channels,
+                        device_name: name,
+                    });
+                }
+                Err(e) => eprintln!("caw: cannot open output on '{}': {}", name, e),
+            }
+        }
+        None
+    }
+
+    /// CPAL callback body: resample + map channels from the source buffer.
+    ///
+    /// Real-time safe: no allocation, no blocking lock (`try_read` only — the
+    /// writer holds the lock just long enough to swap buffers on Play/Stop).
+    fn fill(
+        data: &mut [f32],
+        out_channels: u16,
+        out_rate: u32,
+        shared: &Arc<std::sync::RwLock<AudioStreamState>>,
+        cursor: &Arc<AtomicU64>,
+        state: &SharedState,
+    ) {
+        let silence = |d: &mut [f32]| d.iter_mut().for_each(|s| *s = 0.0);
+
+        if !state.is_playing.load(Ordering::Relaxed) {
+            silence(data);
+            return;
+        }
+
+        let Ok(guard) = shared.try_read() else {
+            // Buffer is being swapped; emit a frame of silence rather than block.
+            silence(data);
+            return;
+        };
+
+        let src_ch = guard.source_channels.max(1) as usize;
+        let out_ch = out_channels.max(1) as usize;
+        let total_src_frames = guard.samples.len() / src_ch;
+        if total_src_frames == 0 {
+            silence(data);
+            return;
+        }
+
+        // Resample ratio: how many source frames advance per output frame.
+        let step = guard.source_rate as f64 / out_rate as f64;
+        let vol = state.volume.load(Ordering::Relaxed) as f32 / 1000.0;
+        let mut pos = f64::from_bits(cursor.load(Ordering::Relaxed));
+
+        let mut finished = false;
+        for frame in data.chunks_mut(out_ch) {
+            let i = pos.floor() as usize;
+            if i >= total_src_frames {
+                frame.iter_mut().for_each(|s| *s = 0.0);
+                finished = true;
+                continue;
+            }
+
+            // Linear interpolation between source frame i and i+1.
+            let frac = (pos - i as f64) as f32;
+            let base = i * src_ch;
+            let next = if i + 1 < total_src_frames {
+                base + src_ch
+            } else {
+                base
+            };
+
+            for (ch, out) in frame.iter_mut().enumerate() {
+                // Map output channel -> source channel. Mono sources feed every
+                // output channel; wider sources wrap (stereo -> 5.1 etc.).
+                let sc = if src_ch == 1 { 0 } else { ch % src_ch };
+                let a = guard.samples[base + sc];
+                let b = guard.samples[next + sc];
+                *out = (a + (b - a) * frac) * vol;
+            }
+            pos += step;
+        }
+
+        cursor.store(pos.to_bits(), Ordering::Relaxed);
+        state.position_frames.store(
+            (pos.floor() as usize).min(total_src_frames),
+            Ordering::Relaxed,
+        );
+        if finished {
+            state.is_playing.store(false, Ordering::Relaxed);
+        }
+    }
+
     fn drain_commands(rx: Receiver<PlayerCommand>) {
         for cmd in rx {
             if matches!(cmd, PlayerCommand::Shutdown) {
@@ -268,10 +442,17 @@ impl Player {
     }
 }
 
+/// A successfully opened output stream and its negotiated format.
+struct OpenStream {
+    stream: cpal::Stream,
+    sample_rate: u32,
+    channels: u16,
+    device_name: String,
+}
+
 /// Shared audio buffer state for the CPAL callback.
 struct AudioStreamState {
     samples: Vec<f32>,
-    position: usize, // in frames (not samples)
     source_channels: u16,
     source_rate: u32,
 }

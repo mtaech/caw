@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 
@@ -41,7 +41,11 @@ pub fn scan_directory(path: &Path) -> Result<Vec<Arc<Track>>> {
         }
     }
 
-    tracks.sort_by(|a, b| a.album.cmp(&b.album).then(a.track_number.cmp(&b.track_number)));
+    tracks.sort_by(|a, b| {
+        a.album
+            .cmp(&b.album)
+            .then(a.track_number.cmp(&b.track_number))
+    });
 
     Ok(tracks)
 }

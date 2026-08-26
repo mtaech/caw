@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use symphonia::core::audio::SampleBuffer;
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
@@ -48,19 +48,17 @@ fn read_tags_from_revision(
                     *album = fix_mojibake(tag.value.to_string());
                 }
             }
-            Some(symphonia::core::meta::StandardTagKey::TrackNumber) => {
-                if *track_number == 0 {
-                    *track_number = tag.value.to_string().parse().unwrap_or(0);
-                }
+            Some(symphonia::core::meta::StandardTagKey::TrackNumber) if *track_number == 0 => {
+                *track_number = tag.value.to_string().parse().unwrap_or(0);
             }
             _ => {}
         }
     }
 
-    if cover_data.is_none() {
-        if let Some(visual) = rev.visuals().first() {
-            *cover_data = Some(Arc::new(visual.data.to_vec()));
-        }
+    if cover_data.is_none()
+        && let Some(visual) = rev.visuals().first()
+    {
+        *cover_data = Some(Arc::new(visual.data.to_vec()));
     }
 }
 
@@ -99,7 +97,10 @@ fn fix_mojibake(s: String) -> String {
     }
     // Only accept if the result actually contains CJK (avoid mangling real
     // Latin-1 text like français).
-    if decoded.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c)) {
+    if decoded
+        .chars()
+        .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+    {
         return decoded.into_owned();
     }
     s
@@ -129,16 +130,30 @@ pub fn read_metadata(path: &Path, id: u64) -> Result<Arc<Track>> {
     let mut cover_data: Option<Arc<Vec<u8>>> = None;
 
     // Read probed metadata.
-    if let Some(meta) = probed.metadata.get() {
-        if let Some(rev) = meta.current() {
-            read_tags_from_revision(rev, &mut title, &mut artist, &mut album, &mut track_number, &mut cover_data);
-        }
+    if let Some(meta) = probed.metadata.get()
+        && let Some(rev) = meta.current()
+    {
+        read_tags_from_revision(
+            rev,
+            &mut title,
+            &mut artist,
+            &mut album,
+            &mut track_number,
+            &mut cover_data,
+        );
     }
 
     // Also check container metadata.
     let mut format = probed.format;
     if let Some(rev) = format.metadata().current() {
-        read_tags_from_revision(rev, &mut title, &mut artist, &mut album, &mut track_number, &mut cover_data);
+        read_tags_from_revision(
+            rev,
+            &mut title,
+            &mut artist,
+            &mut album,
+            &mut track_number,
+            &mut cover_data,
+        );
     }
 
     // Find audio track and get duration.
@@ -212,10 +227,7 @@ pub fn decode_file(path: &Path) -> Result<DecodedAudio> {
     let codec_params = &audio_track.codec_params;
     let track_id = audio_track.id;
     let sample_rate = codec_params.sample_rate.unwrap_or(44100);
-    let channels = codec_params
-        .channels
-        .map(|c| c.count() as u16)
-        .unwrap_or(2);
+    let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
 
     let dec_opts = DecoderOptions::default();
     let mut decoder = symphonia::default::get_codecs()

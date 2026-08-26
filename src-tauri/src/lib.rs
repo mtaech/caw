@@ -48,13 +48,13 @@ fn greet(name: &str) -> String {
 /// An `async` command runs on a worker thread, leaving the main thread free to
 /// pump the dialog loop. (See tauri-plugin-dialog `blocking_*` docs.)
 #[tauri::command]
-async fn pick_music_folder(app: AppHandle, state: tauri::State<'_, CawState>) -> Result<Option<String>, String> {
+async fn pick_music_folder(
+    app: AppHandle,
+    state: tauri::State<'_, CawState>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let picked = app
-        .dialog()
-        .file()
-        .blocking_pick_folder();
+    let picked = app.dialog().file().blocking_pick_folder();
 
     let Some(fp) = picked else {
         return Ok(None);
@@ -76,7 +76,10 @@ async fn pick_music_folder(app: AppHandle, state: tauri::State<'_, CawState>) ->
         use tauri_plugin_store::StoreExt;
         if let Ok(store) = app.store("config.json") {
             let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
-            let arr: serde_json::Value = dirs.iter().map(|d| serde_json::Value::String(d.to_string_lossy().into_owned())).collect();
+            let arr: serde_json::Value = dirs
+                .iter()
+                .map(|d| serde_json::Value::String(d.to_string_lossy().into_owned()))
+                .collect();
             store.set("music_dirs", arr);
             let _ = store.save();
         }
@@ -109,7 +112,11 @@ fn get_minimize_to_tray(state: tauri::State<CawState>) -> bool {
 /// the in-memory flag on CawState so the window event handler can read it
 /// without hitting the store on every close attempt.
 #[tauri::command]
-async fn set_minimize_to_tray(app: AppHandle, state: tauri::State<'_, CawState>, enable: bool) -> Result<(), String> {
+async fn set_minimize_to_tray(
+    app: AppHandle,
+    state: tauri::State<'_, CawState>,
+    enable: bool,
+) -> Result<(), String> {
     {
         let mut v = state.minimize_to_tray.lock().map_err(|e| e.to_string())?;
         *v = enable;
@@ -131,7 +138,11 @@ fn get_queue_replace_mode(state: tauri::State<CawState>) -> bool {
 
 /// Enable or disable queue replace mode.
 #[tauri::command]
-async fn set_queue_replace_mode(app: AppHandle, state: tauri::State<'_, CawState>, enabled: bool) -> Result<(), String> {
+async fn set_queue_replace_mode(
+    app: AppHandle,
+    state: tauri::State<'_, CawState>,
+    enabled: bool,
+) -> Result<(), String> {
     {
         let mut v = state.queue_replace_mode.lock().map_err(|e| e.to_string())?;
         *v = enabled;
@@ -166,12 +177,22 @@ fn rescan_all(app: AppHandle, state: tauri::State<CawState>) -> Result<(), Strin
 /// Return the list of configured music directories.
 #[tauri::command]
 fn get_music_dirs(state: tauri::State<CawState>) -> Vec<String> {
-    state.music_dirs.lock().unwrap().iter().map(|p| p.to_string_lossy().into_owned()).collect()
+    state
+        .music_dirs
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// Remove a music directory from the list and re-scan.
 #[tauri::command]
-async fn remove_music_dir(app: AppHandle, state: tauri::State<'_, CawState>, path: String) -> Result<(), String> {
+async fn remove_music_dir(
+    app: AppHandle,
+    state: tauri::State<'_, CawState>,
+    path: String,
+) -> Result<(), String> {
     {
         let mut dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
         dirs.retain(|d| d.to_string_lossy().as_ref() != path.as_str());
@@ -182,7 +203,10 @@ async fn remove_music_dir(app: AppHandle, state: tauri::State<'_, CawState>, pat
         use tauri_plugin_store::StoreExt;
         if let Ok(store) = app.store("config.json") {
             let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
-            let arr: serde_json::Value = dirs.iter().map(|d| serde_json::Value::String(d.to_string_lossy().into_owned())).collect();
+            let arr: serde_json::Value = dirs
+                .iter()
+                .map(|d| serde_json::Value::String(d.to_string_lossy().into_owned()))
+                .collect();
             store.set("music_dirs", arr);
             let _ = store.save();
         }
@@ -211,7 +235,8 @@ async fn remove_music_dir(app: AppHandle, state: tauri::State<'_, CawState>, pat
 fn scan_all_libraries(app: AppHandle, dirs: Vec<PathBuf>) {
     let _ = app.emit("scan_progress", serde_json::json!({ "scanned": 0 }));
 
-    let mut seen: std::collections::HashMap<PathBuf, std::sync::Arc<crate::models::track::Track>> = std::collections::HashMap::new();
+    let mut seen: std::collections::HashMap<PathBuf, std::sync::Arc<crate::models::track::Track>> =
+        std::collections::HashMap::new();
 
     for dir in &dirs {
         match library::scan_directory(dir) {
@@ -228,7 +253,11 @@ fn scan_all_libraries(app: AppHandle, dirs: Vec<PathBuf>) {
     }
 
     let merged: Vec<std::sync::Arc<crate::models::track::Track>> = seen.into_values().collect();
-    eprintln!("caw: merged library has {} tracks (from {} dirs)", merged.len(), dirs.len());
+    eprintln!(
+        "caw: merged library has {} tracks (from {} dirs)",
+        merged.len(),
+        dirs.len()
+    );
 
     {
         let state = app.state::<CawState>();
@@ -244,15 +273,14 @@ fn scan_all_libraries(app: AppHandle, dirs: Vec<PathBuf>) {
 #[tauri::command]
 fn get_library(state: tauri::State<CawState>) -> Vec<TrackDto> {
     let ctrl = state.ctrl.lock().unwrap();
-    ctrl.library.iter().map(|t| TrackDto::from_track(t)).collect()
+    ctrl.library.iter().map(TrackDto::from_track).collect()
 }
 
 /// Return a single track's cover art as raw bytes.
 #[tauri::command]
 fn get_cover(state: tauri::State<CawState>, id: u64) -> Option<Vec<u8>> {
     let ctrl = state.ctrl.lock().unwrap();
-    ctrl
-        .find_track(id)
+    ctrl.find_track(id)
         .and_then(|t| t.cover_data.clone())
         .map(|arc| (*arc).clone())
 }
@@ -320,7 +348,11 @@ fn add_to_queue(app: AppHandle, state: tauri::State<CawState>, id: u64) -> Resul
 }
 
 #[tauri::command]
-fn remove_from_queue(app: AppHandle, state: tauri::State<CawState>, index: usize) -> Result<(), String> {
+fn remove_from_queue(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    index: usize,
+) -> Result<(), String> {
     let dto = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.remove_from_queue(index);
@@ -331,7 +363,12 @@ fn remove_from_queue(app: AppHandle, state: tauri::State<CawState>, index: usize
 }
 
 #[tauri::command]
-fn reorder_queue(app: AppHandle, state: tauri::State<CawState>, from: usize, to: usize) -> Result<(), String> {
+fn reorder_queue(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    from: usize,
+    to: usize,
+) -> Result<(), String> {
     let dto = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.reorder_queue(from, to);
@@ -363,10 +400,15 @@ fn get_queue_state(state: tauri::State<CawState>) -> serde_json::Value {
 }
 
 #[tauri::command]
-fn save_queue_as_playlist(app: AppHandle, state: tauri::State<CawState>, name: String) -> Result<i64, String> {
+fn save_queue_as_playlist(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    name: String,
+) -> Result<i64, String> {
     let id = {
         let ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
-        ctrl.save_queue_as_playlist(&state.db, &name).map_err(|e| e.to_string())?
+        ctrl.save_queue_as_playlist(&state.db, &name)
+            .map_err(|e| e.to_string())?
     };
     let _ = app.emit("playlist_changed", serde_json::json!({}));
     Ok(id)
@@ -482,11 +524,7 @@ fn set_shuffle(app: AppHandle, state: tauri::State<CawState>, on: bool) -> Resul
 
 /// Set repeat mode: "none", "one", "all".
 #[tauri::command]
-fn set_repeat(
-    app: AppHandle,
-    state: tauri::State<CawState>,
-    mode: String,
-) -> Result<(), String> {
+fn set_repeat(app: AppHandle, state: tauri::State<CawState>, mode: String) -> Result<(), String> {
     use crate::models::playlist::RepeatMode;
     let rpt = match mode.as_str() {
         "one" => RepeatMode::One,
@@ -518,7 +556,11 @@ fn get_playlist(state: tauri::State<CawState>, id: i64) -> Option<db::PlaylistWi
 
 /// Create a new playlist. Returns the new playlist ID.
 #[tauri::command]
-fn create_playlist(app: AppHandle, state: tauri::State<CawState>, name: String) -> Result<i64, String> {
+fn create_playlist(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    name: String,
+) -> Result<i64, String> {
     let id = state.db.create_playlist(&name).map_err(|e| e.to_string())?;
     let _ = app.emit("playlist_changed", serde_json::json!({}));
     Ok(id)
@@ -526,8 +568,16 @@ fn create_playlist(app: AppHandle, state: tauri::State<CawState>, name: String) 
 
 /// Rename a playlist.
 #[tauri::command]
-fn rename_playlist(app: AppHandle, state: tauri::State<CawState>, id: i64, name: String) -> Result<(), String> {
-    state.db.rename_playlist(id, &name).map_err(|e| e.to_string())?;
+fn rename_playlist(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    id: i64,
+    name: String,
+) -> Result<(), String> {
+    state
+        .db
+        .rename_playlist(id, &name)
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("playlist_changed", serde_json::json!({}));
     Ok(())
 }
@@ -542,32 +592,69 @@ fn delete_playlist(app: AppHandle, state: tauri::State<CawState>, id: i64) -> Re
 
 /// Add tracks to a playlist.
 #[tauri::command]
-fn add_to_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: i64, track_ids: Vec<i64>) -> Result<(), String> {
-    state.db.add_tracks(playlist_id, &track_ids).map_err(|e| e.to_string())?;
+fn add_to_playlist(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .add_tracks(playlist_id, &track_ids)
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("playlist_changed", serde_json::json!({ "id": playlist_id }));
     Ok(())
 }
 
 /// Remove tracks from a playlist.
 #[tauri::command]
-fn remove_from_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: i64, track_ids: Vec<i64>) -> Result<(), String> {
-    state.db.remove_tracks(playlist_id, &track_ids).map_err(|e| e.to_string())?;
+fn remove_from_playlist(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .remove_tracks(playlist_id, &track_ids)
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("playlist_changed", serde_json::json!({ "id": playlist_id }));
     Ok(())
 }
 
 /// Reorder a track within a playlist.
 #[tauri::command]
-fn reorder_playlist(app: AppHandle, state: tauri::State<CawState>, playlist_id: i64, track_id: i64, new_position: i64) -> Result<(), String> {
-    state.db.reorder(playlist_id, track_id, new_position).map_err(|e| e.to_string())?;
+fn reorder_playlist(
+    app: AppHandle,
+    state: tauri::State<CawState>,
+    playlist_id: i64,
+    track_id: i64,
+    new_position: i64,
+) -> Result<(), String> {
+    state
+        .db
+        .reorder(playlist_id, track_id, new_position)
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("playlist_changed", serde_json::json!({ "id": playlist_id }));
     Ok(())
 }
+
+/// Cached result of the `fc-list` enumeration.
+///
+/// The font set does not change while the app runs, and the settings dialog
+/// re-queries on every mount, so the subprocess + parse is done once.
+static FONT_CACHE: Mutex<Option<Vec<String>>> = Mutex::new(None);
 
 /// Enumerate system-installed fonts via platform-specific APIs.
 /// Linux uses fontconfig (fc-list); other platforms return empty for now.
 #[tauri::command]
 fn get_system_fonts() -> Result<Vec<String>, String> {
+    if let Ok(guard) = FONT_CACHE.lock()
+        && let Some(ref cached) = *guard
+    {
+        return Ok(cached.clone());
+    }
+
     #[cfg(target_os = "linux")]
     {
         let output = std::process::Command::new("fc-list")
@@ -576,10 +663,7 @@ fn get_system_fonts() -> Result<Vec<String>, String> {
             .map_err(|e| format!("caw: failed to run fc-list: {}", e))?;
 
         if !output.status.success() {
-            return Err(format!(
-                "caw: fc-list exited with {}",
-                output.status
-            ));
+            return Err(format!("caw: fc-list exited with {}", output.status));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -602,6 +686,10 @@ fn get_system_fonts() -> Result<Vec<String>, String> {
                 && !l.contains("wingding")
                 && !l.contains("webdings")
         });
+
+        if let Ok(mut guard) = FONT_CACHE.lock() {
+            *guard = Some(families.clone());
+        }
 
         Ok(families)
     }
@@ -634,36 +722,37 @@ pub fn run() {
                 if let Ok(store) = app.store("config.json") {
                     // Try new format: "music_dirs" as JSON array.
                     let mut dirs: Vec<PathBuf> = Vec::new();
-                    if let Some(val) = store.get("music_dirs") {
-                        if let Some(arr) = val.as_array() {
-                            for v in arr {
-                                if let Some(s) = v.as_str() {
-                                    let p = PathBuf::from(s);
-                                    if p.exists() {
-                                        dirs.push(p);
-                                    }
+                    if let Some(val) = store.get("music_dirs")
+                        && let Some(arr) = val.as_array()
+                    {
+                        for v in arr {
+                            if let Some(s) = v.as_str() {
+                                let p = PathBuf::from(s);
+                                if p.exists() {
+                                    dirs.push(p);
                                 }
                             }
                         }
                     }
 
                     // Migration from old single-string "music_dir" format.
-                    if dirs.is_empty() {
-                        if let Some(val) = store.get("music_dir") {
-                            if let Some(path_str) = val.as_str() {
-                                if !path_str.is_empty() {
-                                    let p = PathBuf::from(path_str);
-                                    if p.exists() {
-                                        dirs.push(p);
-                                    }
-                                    // Migrate: write new key, delete old key, save.
-                                    let arr: serde_json::Value = dirs.iter().map(|d| serde_json::Value::String(d.to_string_lossy().into_owned())).collect();
-                                    store.set("music_dirs", arr);
-                                    store.delete("music_dir");
-                                    let _ = store.save();
-                                }
-                            }
+                    if dirs.is_empty()
+                        && let Some(val) = store.get("music_dir")
+                        && let Some(path_str) = val.as_str()
+                        && !path_str.is_empty()
+                    {
+                        let p = PathBuf::from(path_str);
+                        if p.exists() {
+                            dirs.push(p);
                         }
+                        // Migrate: write new key, delete old key, save.
+                        let arr: serde_json::Value = dirs
+                            .iter()
+                            .map(|d| serde_json::Value::String(d.to_string_lossy().into_owned()))
+                            .collect();
+                        store.set("music_dirs", arr);
+                        store.delete("music_dir");
+                        let _ = store.save();
                     }
 
                     if !dirs.is_empty() {
@@ -695,63 +784,63 @@ pub fn run() {
             // ── Read persistable minimze_to_tray setting ──
             {
                 use tauri_plugin_store::StoreExt;
-                if let Ok(store) = app.store("config.json") {
-                    if let Some(val) = store.get("minimize_to_tray") {
-                        if let Some(b) = val.as_bool() {
-                            *app.state::<CawState>().minimize_to_tray.lock().unwrap() = b;
-                        }
-                    }
+                if let Ok(store) = app.store("config.json")
+                    && let Some(val) = store.get("minimize_to_tray")
+                    && let Some(b) = val.as_bool()
+                {
+                    *app.state::<CawState>().minimize_to_tray.lock().unwrap() = b;
                 }
             }
 
             // ── Read persisted queue_replace_mode setting ──
             {
                 use tauri_plugin_store::StoreExt;
-                if let Ok(store) = app.store("config.json") {
-                    if let Some(val) = store.get("queue_replace_mode") {
-                        if let Some(b) = val.as_bool() {
-                            *app.state::<CawState>().queue_replace_mode.lock().unwrap() = b;
-                        }
-                    }
+                if let Ok(store) = app.store("config.json")
+                    && let Some(val) = store.get("queue_replace_mode")
+                    && let Some(b) = val.as_bool()
+                {
+                    *app.state::<CawState>().queue_replace_mode.lock().unwrap() = b;
                 }
             }
 
             // ── Position tick + auto-advance task ──
             let tick_handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_millis(250));
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_millis(250));
 
-                let state = tick_handle.state::<CawState>();
-                let mut ctrl = match state.ctrl.lock() {
-                    Ok(g) => g,
-                    Err(_) => continue,
-                };
-
-                // 1. Auto-advance check
-                let job = ctrl.check_auto_advance();
-                if let DecodeJob::Play { .. } = &job {
-                    // Decode outside the lock.
-                    drop(ctrl);
-                    controller::execute_decode_job(job, &state.ctrl, &tick_handle);
-                    // Re-acquire for the position emit below.
-                    ctrl = match state.ctrl.lock() {
+                    let state = tick_handle.state::<CawState>();
+                    let mut ctrl = match state.ctrl.lock() {
                         Ok(g) => g,
                         Err(_) => continue,
                     };
-                }
 
-                // 2. Emit position event (only when a track is loaded).
-                if ctrl.current_track_id.is_some() {
-                    let payload = PositionPayload {
-                        current: ctrl.position_secs(),
-                        total: ctrl.current_track_duration(),
-                        is_playing: ctrl.state == CtrlState::Playing,
-                        track_id: ctrl.current_track_id,
-                    };
-                    drop(ctrl);
-                    let _ = tick_handle.emit("position", &payload);
-                } else {
-                    drop(ctrl);
+                    // 1. Auto-advance check
+                    let job = ctrl.check_auto_advance();
+                    if let DecodeJob::Play { .. } = &job {
+                        // Decode outside the lock.
+                        drop(ctrl);
+                        controller::execute_decode_job(job, &state.ctrl, &tick_handle);
+                        // Re-acquire for the position emit below.
+                        ctrl = match state.ctrl.lock() {
+                            Ok(g) => g,
+                            Err(_) => continue,
+                        };
+                    }
+
+                    // 2. Emit position event (only when a track is loaded).
+                    if ctrl.current_track_id.is_some() {
+                        let payload = PositionPayload {
+                            current: ctrl.position_secs(),
+                            total: ctrl.current_track_duration(),
+                            is_playing: ctrl.state == CtrlState::Playing,
+                            track_id: ctrl.current_track_id,
+                        };
+                        drop(ctrl);
+                        let _ = tick_handle.emit("position", &payload);
+                    } else {
+                        drop(ctrl);
+                    }
                 }
             });
 

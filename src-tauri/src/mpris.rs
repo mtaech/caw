@@ -53,10 +53,18 @@ fn run_mpris(app: AppHandle, rx: std::sync::mpsc::Receiver<u32>) -> Result<()> {
     let root_path = "/org/mpris/MediaPlayer2";
 
     // Register both interfaces on the same object path.
-    conn.object_server()
-        .at(root_path, MprisRoot { handle: app.clone() })?;
-    conn.object_server()
-        .at(root_path, MprisPlayer { handle: app.clone() })?;
+    conn.object_server().at(
+        root_path,
+        MprisRoot {
+            handle: app.clone(),
+        },
+    )?;
+    conn.object_server().at(
+        root_path,
+        MprisPlayer {
+            handle: app.clone(),
+        },
+    )?;
 
     conn.request_name("org.mpris.MediaPlayer2.caw")?;
     eprintln!("caw: MPRIS service registered as org.mpris.MediaPlayer2.caw");
@@ -112,19 +120,16 @@ fn run_mpris(app: AppHandle, rx: std::sync::mpsc::Receiver<u32>) -> Result<()> {
         changed.insert("Shuffle", Value::from(dto.shuffle));
 
         // Metadata
-        let mut meta: std::collections::HashMap<&str, Value<'_>> =
-            std::collections::HashMap::new();
+        let mut meta: std::collections::HashMap<&str, Value<'_>> = std::collections::HashMap::new();
         if let Some((tid, dur, title, album, track_num, artist_str, cover_data)) = track_info {
             let track_id_val = Value::ObjectPath(
                 zbus::zvariant::ObjectPath::try_from(format!(
-                "/org/mpris/MediaPlayer2/Track/{tid}"
-                )).unwrap()
+                    "/org/mpris/MediaPlayer2/Track/{tid}"
+                ))
+                .unwrap(),
             );
             meta.insert("mpris:trackid", track_id_val);
-            meta.insert(
-                "mpris:length",
-                Value::from(dur.as_micros() as i64),
-            );
+            meta.insert("mpris:length", Value::from(dur.as_micros() as i64));
             meta.insert("xesam:title", Value::from(Str::from(title)));
             meta.insert("xesam:album", Value::from(Str::from(album)));
             meta.insert("xesam:trackNumber", Value::from(track_num as i32));
@@ -138,10 +143,10 @@ fn run_mpris(app: AppHandle, rx: std::sync::mpsc::Receiver<u32>) -> Result<()> {
                 let cache_dir = std::env::temp_dir().join("caw-covers");
                 let _ = std::fs::create_dir_all(&cache_dir);
                 let cover_path = cache_dir.join(format!("cover-{tid}.jpg"));
-                if !cover_path.exists() {
-                    if let Some(data) = &cover_data {
-                        let _ = std::fs::write(&cover_path, &**data);
-                    }
+                if !cover_path.exists()
+                    && let Some(data) = &cover_data
+                {
+                    let _ = std::fs::write(&cover_path, &**data);
                 }
                 meta.insert(
                     "mpris:artUrl",
@@ -288,8 +293,10 @@ impl MprisPlayer {
                 zbus::zvariant::ObjectPath::try_from(format!(
                     "/org/mpris/MediaPlayer2/Track/{}",
                     track.id
-                )).unwrap()
-            )).unwrap(),
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
         );
         meta.insert(
             "mpris:length".into(),
@@ -297,10 +304,7 @@ impl MprisPlayer {
         );
         meta.insert(
             "xesam:title".into(),
-            OwnedValue::try_from(Value::Str(Str::from(
-                track.display_title().to_string(),
-            )))
-            .unwrap(),
+            OwnedValue::try_from(Value::Str(Str::from(track.display_title().to_string()))).unwrap(),
         );
         meta.insert(
             "xesam:album".into(),
@@ -485,15 +489,18 @@ impl MprisPlayer {
         let ctrl = state.ctrl.lock().map_err(Self::play_err)?;
         let current_pos = ctrl.position_secs();
         let dur = ctrl.current_track_duration();
-        let new_pos = ((current_pos * 1_000_000.0 + offset as f64) / 1_000_000.0)
-            .clamp(0.0, dur);
+        let new_pos = ((current_pos * 1_000_000.0 + offset as f64) / 1_000_000.0).clamp(0.0, dur);
         drop(ctrl);
         let mut ctrl = state.ctrl.lock().map_err(Self::play_err)?;
         ctrl.seek(new_pos);
         Ok(())
     }
 
-    fn set_position(&mut self, _track_id: zbus::zvariant::ObjectPath<'_>, position: i64) -> zbus::fdo::Result<()> {
+    fn set_position(
+        &mut self,
+        _track_id: zbus::zvariant::ObjectPath<'_>,
+        position: i64,
+    ) -> zbus::fdo::Result<()> {
         // position is in microseconds
         let pos_sec = position as f64 / 1_000_000.0;
         let state = self.handle.state::<crate::CawState>();

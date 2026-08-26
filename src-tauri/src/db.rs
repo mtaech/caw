@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult, params};
 
 /// A minimal playlist row from the database.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -107,7 +107,11 @@ impl Database {
             .filter_map(|r| r.ok())
             .collect();
 
-        Some(PlaylistWithTracks { id, name, track_ids })
+        Some(PlaylistWithTracks {
+            id,
+            name,
+            track_ids,
+        })
     }
 
     pub fn create_playlist(&self, name: &str) -> SqlResult<i64> {
@@ -127,7 +131,10 @@ impl Database {
 
     pub fn delete_playlist(&self, id: i64) -> SqlResult<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        conn.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
+            params![id],
+        )?;
         conn.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
         Ok(())
     }

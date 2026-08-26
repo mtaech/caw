@@ -1,27 +1,46 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { FolderOpen, FolderX, Music, RefreshCw, X, ChevronDown } from "lucide-vue-next";
-import { SwitchRoot, SwitchThumb } from "radix-vue";
+import {
+  FolderOpen,
+  FolderX,
+  RefreshCw,
+  ChevronDown,
+  Sun,
+  Moon,
+  Laptop,
+  Check,
+  Disc3,
+  Sliders,
+  Type,
+  Folder,
+  Info,
+} from "lucide-vue-next";
 import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { usePlaybackStore } from "@/stores/playback";
-import { invoke } from "@tauri-apps/api/core";
+import { useTheme } from "@/composables/useTheme";
 import Button from "@/components/ui/Button.vue";
-import { applyFont, getFontPreference, setFontPreference, getAvailableFonts, loadSystemFonts } from "@/lib/fonts";
-import type { FontOption } from "@/lib/fonts";
+import {
+  applyFont,
+  getFontPreference,
+  setFontPreference,
+  loadSystemFonts,
+  getAvailableFonts,
+  type FontOption,
+} from "@/lib/fonts";
 import * as api from "@/lib/tauri";
 
 const playback = usePlaybackStore();
+const { theme, setTheme } = useTheme();
+
 const musicDirs = ref<string[]>([]);
 const loading = ref(true);
 const scanning = ref(false);
-const minimizeToTray = ref(false);
-const queueReplaceMode = ref(true);
 
 // ── Font preference ──
 const fontOptions = ref<FontOption[]>([
-  { id: "default", label: "系统默认", fontFamily: "" },
+  { id: "default", label: "系统默认 (System Default)", fontFamily: "" },
 ]);
 const currentFont = ref(getFontPreference());
 watch(currentFont, (id) => {
@@ -33,12 +52,11 @@ watch(currentFont, (id) => {
 const fontPickerOpen = ref(false);
 const fontSearch = ref("");
 const fontTriggerRef = ref<HTMLElement | null>(null);
-const fontDropdownRef = ref<HTMLElement | null>(null);
 const dropdownLeft = ref(0);
 const dropdownTop = ref(0);
 
-const currentFontLabel = computed(() =>
-  fontOptions.value.find((o) => o.id === currentFont.value)?.label ?? "系统默认",
+const currentFontLabel = computed(
+  () => fontOptions.value.find((o) => o.id === currentFont.value)?.label ?? "系统默认",
 );
 
 const filteredFonts = computed(() => {
@@ -47,10 +65,6 @@ const filteredFonts = computed(() => {
   return fontOptions.value.filter((o) => o.label.toLowerCase().includes(q));
 });
 
-// Virtualized font list. The picker can hold thousands of families, and each
-// row previews itself in its own font-family — rendering them all forces the
-// engine to load and rasterize every installed font at once, which froze the
-// dropdown on open. Only the visible rows are mounted now.
 const fontListRef = ref<HTMLElement | null>(null);
 
 const fontVirtualizerOptions = computed(() => ({
@@ -79,11 +93,9 @@ function toggleFontPicker() {
   if (fontTriggerRef.value) {
     const r = fontTriggerRef.value.getBoundingClientRect();
     dropdownLeft.value = r.left;
-    dropdownTop.value = r.bottom + 4;
+    dropdownTop.value = r.bottom + 6;
   }
   fontPickerOpen.value = true;
-  // The scroll element only exists once the dropdown is mounted, so the
-  // virtualizer has nothing to measure until the next tick.
   nextTick(() => fontVirtualizer.value?.measure());
 }
 
@@ -93,100 +105,45 @@ function selectFont(id: string) {
   fontSearch.value = "";
 }
 
-// Filtering changes the row count; jump back to the top so the visible
-// window matches the new result set instead of a stale offset.
 watch(fontSearch, () => {
   nextTick(() => {
     if (fontListRef.value) fontListRef.value.scrollTop = 0;
-    fontVirtualizer.value?.measure();
   });
 });
 
-function onDocumentClick(e: MouseEvent) {
-  if (!fontPickerOpen.value) return;
-  const target = e.target as Node;
-  if (fontTriggerRef.value?.contains(target)) return;
-  if (fontDropdownRef.value?.contains(target)) return;
-  fontPickerOpen.value = false;
-}
-
-onMounted(async () => {
-  // Load system fonts for the font picker.
-  await loadSystemFonts();
-  fontOptions.value = [
-    { id: "default", label: "系统默认", fontFamily: "" },
-    ...getAvailableFonts(),
-  ];
-
-  document.addEventListener("click", onDocumentClick);
-
-  try {
-    minimizeToTray.value = await api.getMinimizeToTray();
-    try {
-      queueReplaceMode.value = await api.getQueueReplaceMode();
-    } catch {}
-  } catch {}
-  await loadDirs();
-
-  // Listen for scan completion to reset scanning state
-  unlisteners.push(
-    await listen("library_updated", () => {
-      scanning.value = false;
-    }),
-  );
-  unlisteners.push(
-    await listen("scan_progress", () => {
-      // Keep scanning true until we see library_updated
-    }),
-  );
-});
-
-const unlisteners: UnlistenFn[] = [];
-onUnmounted(() => {
-  document.removeEventListener("click", onDocumentClick);
-  for (const fn of unlisteners) fn();
-});
-
-async function handleQueueReplaceToggle(checked: boolean) {
-  queueReplaceMode.value = checked;
-  try {
-    await playback.setQueueReplaceMode(checked);
-  } catch (e) {
-    console.error("caw: failed to set queue replace mode", e);
-    queueReplaceMode.value = !checked;
-  }
-}
-
-async function handleMinimizeToggle(checked: boolean) {
-  minimizeToTray.value = checked;
-  try {
-    await api.setMinimizeToTray(checked);
-  } catch (e) {
-    console.error("caw: failed to set minimize_to_tray", e);
-    minimizeToTray.value = !checked;
-  }
-}
+let unlistenScanStarted: UnlistenFn | null = null;
+let unlistenScanComplete: UnlistenFn | null = null;
 
 async function loadDirs() {
   loading.value = true;
   try {
     musicDirs.value = await api.getMusicDirs();
-  } catch (e) {
-    console.error("caw: failed to load music dirs", e);
+  } catch (err) {
+    console.error("Failed to load music dirs:", err);
   } finally {
     loading.value = false;
   }
 }
 
-async function handleAddDir() {
+async function handleAdd() {
   try {
-    const result = await invoke<string | null>("pick_music_folder");
-    if (result !== null) {
-      scanning.value = true;
+    const selected = await playback.pickMusicFolder();
+    if (selected) {
       await loadDirs();
+      await playback.init();
     }
-  } catch (e) {
-    console.error("caw: pick folder failed", e);
+  } catch (err) {
+    console.error("Failed to add music dir:", err);
+  }
+}
+
+async function handleRemove(path: string) {
+  try {
+    await api.removeMusicDir(path);
+    await loadDirs();
+    await playback.init();
+  } catch (err) {
+    console.error("Failed to remove music dir:", err);
   }
 }
 
@@ -194,198 +151,241 @@ async function handleRescan() {
   scanning.value = true;
   try {
     await api.rescanAll();
-    // scan_progress / library_updated events will update state
-  } catch (e) {
-    console.error("caw: rescan failed", e);
+  } catch (err) {
+    console.error("Failed to trigger rescan:", err);
     scanning.value = false;
   }
 }
 
-async function handleRemoveDir(path: string) {
+onMounted(async () => {
+  await loadDirs();
   try {
-    await api.removeMusicDir(path);
-    await loadDirs();
-  } catch (e) {
-    console.error("caw: remove music dir failed", e);
-  }
-}
+    await loadSystemFonts();
+    const loaded = getAvailableFonts();
+    if (loaded && loaded.length > 0) {
+      fontOptions.value = [
+        { id: "default", label: "系统默认 (System Default)", fontFamily: "" },
+        ...loaded,
+      ];
+    }
+  } catch {}
+
+  unlistenScanStarted = await listen("library-scan-started", () => {
+    scanning.value = true;
+  });
+  unlistenScanComplete = await listen("library-scan-complete", async () => {
+    scanning.value = false;
+    await playback.init();
+  });
+});
+
+onUnmounted(() => {
+  unlistenScanStarted?.();
+  unlistenScanComplete?.();
+});
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto p-6 space-y-8">
-    <!-- Page title -->
-    <h1 class="text-title text-foreground">设置</h1>
+  <div class="h-full overflow-y-auto p-8 select-none max-w-3xl mx-auto space-y-8">
+    <!-- Header -->
+    <div>
+      <h1 class="text-display font-bold text-foreground tracking-tight">偏好设置</h1>
+      <p class="text-body-sm text-muted-foreground mt-1">自定义外观、音乐资料库及播放选项</p>
+    </div>
 
-    <!-- Music directories section -->
-    <section class="space-y-3">
-      <h2 class="text-body-md text-foreground">音乐目录</h2>
-      <p class="text-body-sm text-muted-foreground">
-        添加您存放音乐文件的文件夹。支持多个目录。
-      </p>
+    <!-- 1. 外观与主题 -->
+    <section class="space-y-3.5">
+      <div class="flex items-center gap-2">
+        <Sliders class="w-4 h-4 text-primary" />
+        <h2 class="text-title-sm font-semibold text-foreground">外观与主题</h2>
+      </div>
 
-      <!-- Directory list -->
-      <div v-if="musicDirs.length > 0" class="space-y-2">
-        <div
-          v-for="dir in musicDirs"
-          :key="dir"
-          class="flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-elevated border border-border"
-        >
-          <div class="flex items-center gap-3 min-w-0">
-            <Music class="w-4 h-4 text-primary flex-shrink-0" />
-            <span class="text-body text-foreground truncate">{{ dir }}</span>
-          </div>
+      <div class="bg-elevated/70 border border-border/80 rounded-2xl p-5 space-y-4 shadow-1">
+        <div>
+          <label class="text-sm font-medium text-foreground">颜色模式</label>
+          <p class="text-xs text-muted-foreground mt-0.5">选择您喜爱的界面色调</p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
           <button
-            class="flex-shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-            :title="'移除 ' + dir"
-            @click="handleRemoveDir(dir)"
+            class="flex flex-col items-center gap-2 p-3.5 rounded-xl border transition-all duration-150 text-center"
+            :class="
+              theme === 'system'
+                ? 'border-primary bg-primary/10 text-primary font-medium shadow-sm ring-1 ring-primary'
+                : 'border-border/70 hover:border-border bg-background/50 hover:bg-background text-muted-foreground hover:text-foreground'
+            "
+            @click="setTheme('system')"
           >
-            <X class="w-4 h-4" />
+            <Laptop class="w-5 h-5" />
+            <span class="text-xs">跟随系统</span>
+          </button>
+
+          <button
+            class="flex flex-col items-center gap-2 p-3.5 rounded-xl border transition-all duration-150 text-center"
+            :class="
+              theme === 'light'
+                ? 'border-primary bg-primary/10 text-primary font-medium shadow-sm ring-1 ring-primary'
+                : 'border-border/70 hover:border-border bg-background/50 hover:bg-background text-muted-foreground hover:text-foreground'
+            "
+            @click="setTheme('light')"
+          >
+            <Sun class="w-5 h-5" />
+            <span class="text-xs">浅色模式</span>
+          </button>
+
+          <button
+            class="flex flex-col items-center gap-2 p-3.5 rounded-xl border transition-all duration-150 text-center"
+            :class="
+              theme === 'dark'
+                ? 'border-primary bg-primary/10 text-primary font-medium shadow-sm ring-1 ring-primary'
+                : 'border-border/70 hover:border-border bg-background/50 hover:bg-background text-muted-foreground hover:text-foreground'
+            "
+            @click="setTheme('dark')"
+          >
+            <Moon class="w-5 h-5" />
+            <span class="text-xs">深色模式</span>
           </button>
         </div>
       </div>
+    </section>
 
-      <!-- Empty state -->
-      <div
-        v-else-if="!loading"
-        class="flex items-center gap-3 px-4 py-6 rounded-lg bg-elevated border border-border text-muted-foreground"
-      >
-        <FolderX class="w-5 h-5 flex-shrink-0" />
-        <p class="text-body-sm">尚未添加音乐目录</p>
-      </div>
-
-      <!-- Add button -->
+    <!-- 2. 字体选择 -->
+    <section class="space-y-3.5">
       <div class="flex items-center gap-2">
-        <Button variant="outline" size="md" @click="handleAddDir">
-          <FolderOpen class="w-4 h-4 mr-2" />
-          添加目录
-        </Button>
-        <Button variant="outline" size="md" @click="handleRescan" :disabled="scanning">
-          <RefreshCw class="w-4 h-4 mr-2" :class="{ 'animate-spin': scanning }" />
-          重新扫描
-        </Button>
+        <Type class="w-4 h-4 text-primary" />
+        <h2 class="text-title-sm font-semibold text-foreground">界面字体</h2>
       </div>
-    </section>
 
-    <!-- Behavior section -->
-    <section class="space-y-3">
-      <h2 class="text-body-md text-foreground">行为</h2>
-      <div class="flex items-center justify-between px-4 py-3 rounded-lg bg-elevated border border-border">
-        <div class="space-y-0.5">
-          <p class="text-body text-foreground">关闭时最小化到托盘</p>
-          <p class="text-body-sm text-muted-foreground">关闭窗口时隐藏到系统托盘而非退出</p>
-        </div>
-        <SwitchRoot
-          :checked="minimizeToTray"
-          @update:checked="handleMinimizeToggle"
-          class="w-10 h-5 rounded-full data-[state=checked]:bg-primary data-[state=unchecked]:bg-border transition-colors duration-200 flex-shrink-0"
-        >
-          <SwitchThumb class="block w-4 h-4 rounded-full bg-foreground shadow mx-0.5 transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0" />
-        </SwitchRoot>
-      </div>
-      <div class="flex items-center justify-between px-4 py-3 rounded-lg bg-elevated border border-border">
-        <div class="space-y-0.5">
-          <p class="text-body text-foreground">替换当前播放队列</p>
-          <p class="text-body-sm text-muted-foreground">点击专辑/艺人/播放列表播放时替换当前队列，关闭则追加</p>
-        </div>
-        <SwitchRoot
-          :checked="queueReplaceMode"
-          @update:checked="handleQueueReplaceToggle"
-          class="w-10 h-5 rounded-full data-[state=checked]:bg-primary data-[state=unchecked]:bg-border transition-colors duration-200 flex-shrink-0"
-        >
-          <SwitchThumb class="block w-4 h-4 rounded-full bg-foreground shadow mx-0.5 transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0" />
-        </SwitchRoot>
-      </div>
-    </section>
-
-    <!-- Font section -->
-    <section class="space-y-3">
-      <h2 class="text-body-md text-foreground">字体</h2>
-
-      <!-- Combobox trigger + dropdown -->
-      <div class="relative">
-        <button
-          ref="fontTriggerRef"
-          class="flex h-9 w-64 items-center justify-between gap-2 rounded-md border border-border bg-elevated px-3 text-sm text-foreground hover:bg-elevated-hover transition-colors"
-          @click.stop="toggleFontPicker"
-        >
-          <span class="truncate">{{ currentFontLabel }}</span>
-          <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        </button>
-
-        <Teleport to="body">
-          <Transition name="pop">
-            <div
-              v-if="fontPickerOpen"
-              ref="fontDropdownRef"
-              class="fixed z-dropdown w-72 rounded-lg border border-border bg-elevated shadow-2 overflow-hidden"
-              :style="{ left: dropdownLeft + 'px', top: dropdownTop + 'px' }"
-            >
-              <!-- Search -->
-              <div class="p-2 border-b border-border">
-                <input
-                  v-model="fontSearch"
-                  class="w-full h-8 rounded-md border border-border bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
-                  placeholder="搜索字体…"
-                  @keydown.escape="fontPickerOpen = false"
-                />
-              </div>
-
-       <!-- Options list (virtualized: see fontVirtualizer) -->
-              <div ref="fontListRef" class="overflow-y-auto max-h-60 py-1">
-      <div
-     v-if="fontVirtualizer && filteredFonts.length"
-           class="relative w-full"
-      :style="{ height: fontVirtualizer.getTotalSize() + 'px' }"
-              >
-  <button
-     v-for="row in virtualFontRows"
-      :key="row.key"
-           class="absolute top-0 left-0 w-full flex items-center px-3 text-sm text-left hover:bg-elevated-hover transition-colors"
-      :class="{ 'bg-primary/10': row._font.id === currentFont }"
-    :style="{
-          height: row.size + 'px',
-transform: `translateY(${row.start}px)`,
-  fontFamily: row._font.fontFamily || undefined,
-       }"
-      @click.stop="selectFont(row._font.id)"
-                  >
-      {{ row._font.label }}
-  </button>
+      <div class="bg-elevated/70 border border-border/80 rounded-2xl p-5 space-y-3 shadow-1">
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="text-sm font-medium text-foreground">首选字体</label>
+            <p class="text-xs text-muted-foreground mt-0.5">选择系统中安装的字体渲染界面文字</p>
           </div>
-
-              <div
-          v-if="filteredFonts.length === 0"
-       class="px-3 py-6 text-sm text-muted-foreground text-center"
-              >
-   未找到匹配字体
-     </div>
-            </div>
-
-              <!-- Footer -->
-              <div
-                class="px-3 py-1.5 border-t border-border text-caption text-faint-foreground text-center"
-              >
-                {{ fontOptions.length - 1 }} 个可用
-              </div>
-            </div>
-          </Transition>
-        </Teleport>
+          
+          <button
+            ref="fontTriggerRef"
+            class="h-9 px-3.5 rounded-lg border border-border bg-background hover:bg-elevated-hover flex items-center justify-between gap-3 text-sm font-medium text-foreground min-w-[200px] transition-colors"
+            @click="toggleFontPicker"
+          >
+            <span class="truncate">{{ currentFontLabel }}</span>
+            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          </button>
+        </div>
       </div>
-
-      <p class="text-body-sm text-faint-foreground">
-        自动检测系统已安装字体。可能需要重启应用才能完全生效。
-      </p>
     </section>
 
-    <!-- About section -->
-    <section class="space-y-3">
-      <h2 class="text-body-md text-foreground">关于</h2>
-      <div class="px-4 py-4 rounded-lg bg-elevated border border-border space-y-1">
-        <p class="text-body text-foreground">Caw v0.1.0</p>
-        <p class="text-body-sm text-muted-foreground">
-          基于 Rust + Tauri 开发的开源音乐播放器
-        </p>
+    <!-- 3. 音乐资料库 -->
+    <section class="space-y-3.5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <Folder class="w-4 h-4 text-primary" />
+          <h2 class="text-title-sm font-semibold text-foreground">音乐目录</h2>
+        </div>
+        <Button variant="secondary" size="sm" :disabled="scanning" @click="handleRescan">
+          <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': scanning }" />
+          {{ scanning ? "正在重新扫描……" : "重新扫描" }}
+        </Button>
+      </div>
+
+      <div class="bg-elevated/70 border border-border/80 rounded-2xl p-5 space-y-4 shadow-1">
+        <div v-if="loading" class="text-sm text-muted-foreground py-2">加载中……</div>
+        <div v-else-if="musicDirs.length === 0" class="text-sm text-muted-foreground py-2">
+          暂无配置的音乐目录
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="dir in musicDirs"
+            :key="dir"
+            class="flex items-center justify-between p-3 rounded-xl bg-background/80 border border-border/70"
+          >
+            <div class="flex items-center gap-2.5 min-w-0 pr-3">
+              <FolderOpen class="w-4 h-4 text-primary flex-shrink-0" />
+              <span class="text-sm font-mono text-foreground truncate">{{ dir }}</span>
+            </div>
+            <button
+              class="text-muted-foreground hover:text-destructive p-1.5 rounded-md hover:bg-destructive/10 transition-colors flex-shrink-0"
+              title="移除此目录"
+              @click="handleRemove(dir)"
+            >
+              <FolderX class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <Button variant="default" size="md" @click="handleAdd">
+          <FolderOpen class="w-4 h-4 mr-2" />
+          添加音乐文件夹
+        </Button>
+      </div>
+    </section>
+
+    <!-- 4. 关于 Caw -->
+    <section class="space-y-3.5">
+      <div class="flex items-center gap-2">
+        <Info class="w-4 h-4 text-primary" />
+        <h2 class="text-title-sm font-semibold text-foreground">关于</h2>
+      </div>
+
+      <div class="bg-elevated/70 border border-border/80 rounded-2xl p-5 space-y-4 shadow-1">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md">
+            <Disc3 class="w-7 h-7" />
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-foreground">Caw Music Player</h3>
+            <p class="text-xs text-muted-foreground mt-0.5">版本 0.2.0 · 纯 Rust 音频引擎驱动</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 pt-2 border-t border-border/60">
+          <span class="px-2.5 py-1 rounded-md bg-background text-xs text-muted-foreground border border-border/60">Rust + Tauri v2</span>
+          <span class="px-2.5 py-1 rounded-md bg-background text-xs text-muted-foreground border border-border/60">Symphonia + CPAL</span>
+          <span class="px-2.5 py-1 rounded-md bg-background text-xs text-muted-foreground border border-border/60">Vue 3 + TailwindCSS</span>
+        </div>
       </div>
     </section>
   </div>
+
+  <!-- Virtualized Font Picker Dropdown Modal / Portal -->
+  <Teleport to="body">
+    <div
+      v-if="fontPickerOpen"
+      class="fixed inset-0 z-dropdown"
+      @click="fontPickerOpen = false"
+    >
+      <div
+        class="absolute bg-elevated border border-border rounded-xl shadow-3 w-80 max-h-80 overflow-hidden flex flex-col backdrop-blur-md"
+        :style="{ left: dropdownLeft + 'px', top: dropdownTop + 'px' }"
+        @click.stop
+      >
+        <div class="p-2.5 border-b border-border/70">
+          <input
+            v-model="fontSearch"
+            type="text"
+            placeholder="搜索已安装字体……"
+            class="w-full px-3 py-1.5 text-xs bg-background border border-border rounded-lg outline-none focus:border-primary text-foreground"
+          />
+        </div>
+        <div ref="fontListRef" class="flex-1 overflow-y-auto p-1 max-h-64">
+          <div :style="{ height: fontVirtualizer?.getTotalSize() + 'px' }" class="relative">
+            <button
+              v-for="row in virtualFontRows"
+              :key="row.key"
+              class="w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between hover:bg-elevated-hover transition-colors absolute top-0 left-0"
+              :style="{
+                height: row.size + 'px',
+                transform: `translateY(${row.start}px)`,
+                fontFamily: row._font.fontFamily,
+              }"
+              @click="selectFont(row._font.id)"
+            >
+              <span class="truncate">{{ row._font.label }}</span>
+              <Check v-if="currentFont === row._font.id" class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

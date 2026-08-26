@@ -16,7 +16,7 @@ use crate::models::track::Track;
 #[derive(Debug)]
 pub enum DecodeJob {
     None,
-    Play { path: PathBuf, id: u64 },
+    Play { path: PathBuf, id: u64, seek_pos: f64 },
 }
 
 // ── Controller State ───────────────────────────────────────────────
@@ -49,6 +49,12 @@ pub struct PlaybackController {
     ended_track_handled: bool,
     /// History of recently played track IDs (most recent first).
     pub history: Vec<u64>,
+    /// Saved position in seconds (used before decode or after restoration)
+    pub saved_position: f64,
+    /// Persisted last track path for recovery across library scans/restarts
+    pub saved_track_path: Option<String>,
+    /// Persisted queue paths for recovery
+    pub saved_queue_paths: Vec<String>,
 }
 
 impl PlaybackController {
@@ -67,6 +73,9 @@ impl PlaybackController {
             scanning: false,
             ended_track_handled: false,
             history: Vec::new(),
+            saved_position: 0.0,
+            saved_track_path: None,
+            saved_queue_paths: Vec::new(),
         };
         ctrl.sync_player_volume();
         ctrl
@@ -79,27 +88,72 @@ impl PlaybackController {
     // ── Library ──
 
     pub fn set_library(&mut self, tracks: Vec<Arc<Track>>) {
+        let target_path = self
+            .current_track_path()
+            .map(|p| p.to_string_lossy().to_string())
+            .or_else(|| self.saved_track_path.clone());
+
         self.library = tracks;
-        // Reset queue to full library in natural album/track-number order.
-        self.queue = self.library.iter().map(|t| t.id).collect();
-        self.queue_index = None;
-        self.current_track_id = None;
-        self.state = CtrlState::Stopped;
-        self.ended_track_handled = false;
-        self.history.clear();
+
+        // Build queue from saved queue paths if available, otherwise default to full library
+        if !self.saved_queue_paths.is_empty() {
+            let mut restored_queue = Vec::new();
+            for qp in &self.saved_queue_paths {
+                if let Some(t) = self.library.iter().find(|t| t.path.to_string_lossy() == *qp) {
+                    restored_queue.push(t.id);
+                }
+            }
+            if !restored_queue.is_empty() {
+                self.queue = restored_queue;
+            } else {
+                self.queue = self.library.iter().map(|t| t.id).collect();
+            }
+        } else {
+            self.queue = self.library.iter().map(|t| t.id).collect();
+        }
+
+        // Try to match target track
+        if let Some(ref path_str) = target_path {
+            if let Some(matching) = self
+                .library
+                .iter()
+                .find(|t| t.path.to_string_lossy() == *path_str)
+            {
+                let matched_id = matching.id;
+                self.current_track_id = Some(matched_id);
+                self.queue_index = self.queue.iter().position(|&id| id == matched_id);
+                if self.state == CtrlState::Stopped {
+                    self.state = CtrlState::Paused;
+                }
+                return;
+            }
+        }
+
+        if self.current_track_id.is_none() {
+            self.queue_index = None;
+            self.state = CtrlState::Stopped;
+        }
     }
 
     pub fn find_track(&self, id: u64) -> Option<&Arc<Track>> {
         self.library.iter().find(|t| t.id == id)
     }
 
-    fn find_track_path(&self, id: u64) -> Option<PathBuf> {
+    pub fn find_track_path(&self, id: u64) -> Option<PathBuf> {
         self.find_track(id).map(|t| t.path.clone())
     }
 
     pub fn current_track_path(&self) -> Option<PathBuf> {
         self.current_track_id
             .and_then(|id| self.find_track_path(id))
+    }
+
+    pub fn current_queue_paths(&self) -> Vec<String> {
+        self.queue
+            .iter()
+            .filter_map(|&id| self.find_track_path(id))
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
     }
 
     pub fn current_track_duration(&self) -> f64 {
@@ -118,10 +172,15 @@ impl PlaybackController {
         let start_idx = self.queue.iter().position(|&id| id == start_id);
         self.queue_index = start_idx;
         self.current_track_id = Some(start_id);
+        self.saved_position = 0.0;
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
         match self.find_track_path(start_id) {
-            Some(path) => DecodeJob::Play { path, id: start_id },
+            Some(path) => DecodeJob::Play {
+                path,
+                id: start_id,
+                seek_pos: 0.0,
+            },
             None => DecodeJob::None,
         }
     }
@@ -162,11 +221,16 @@ impl PlaybackController {
         let start_idx = insert_pos + start_offset;
         self.queue_index = Some(start_idx);
         self.current_track_id = Some(start_id);
+        self.saved_position = 0.0;
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
         self.shuffle = false; // Explicit queue overrides shuffle
         match self.find_track_path(start_id) {
-            Some(path) => DecodeJob::Play { path, id: start_id },
+            Some(path) => DecodeJob::Play {
+                path,
+                id: start_id,
+                seek_pos: 0.0,
+            },
             None => DecodeJob::None,
         }
     }
@@ -174,14 +238,38 @@ impl PlaybackController {
     pub fn prepare_toggle_play(&mut self) -> DecodeJob {
         match self.state {
             CtrlState::Playing => {
+                self.saved_position = self.position_secs();
                 self.state = CtrlState::Paused;
                 let _ = self.player().send(PlayerCommand::Pause);
                 DecodeJob::None
             }
             CtrlState::Paused => {
-                self.state = CtrlState::Playing;
-                let _ = self.player().send(PlayerCommand::Resume);
-                DecodeJob::None
+                let has_stream = if let Some(ref p) = self.player {
+                    p.state.total_frames.load(Ordering::Relaxed) > 0
+                } else {
+                    false
+                };
+
+                if has_stream {
+                    self.state = CtrlState::Playing;
+                    let _ = self.player().send(PlayerCommand::Resume);
+                    DecodeJob::None
+                } else {
+                    // Stream not yet loaded (e.g. restored from previous session)
+                    match self
+                        .current_track_id
+                        .and_then(|id| self.find_track_path(id))
+                    {
+                        Some(path) => {
+                            let id = self.current_track_id.unwrap();
+                            let seek_pos = self.saved_position;
+                            self.state = CtrlState::Playing;
+                            self.ended_track_handled = false;
+                            DecodeJob::Play { path, id, seek_pos }
+                        }
+                        None => DecodeJob::None,
+                    }
+                }
             }
             CtrlState::Stopped => {
                 if self.current_track_id.is_none() && !self.queue.is_empty() {
@@ -194,9 +282,10 @@ impl PlaybackController {
                 {
                     Some(path) => {
                         let id = self.current_track_id.unwrap();
+                        let seek_pos = self.saved_position;
                         self.state = CtrlState::Playing;
                         self.ended_track_handled = false;
-                        DecodeJob::Play { path, id }
+                        DecodeJob::Play { path, id, seek_pos }
                     }
                     None => DecodeJob::None,
                 }
@@ -220,10 +309,15 @@ impl PlaybackController {
         self.queue_index = Some(next);
         let id = self.queue[next];
         self.current_track_id = Some(id);
+        self.saved_position = 0.0;
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
         match self.find_track_path(id) {
-            Some(path) => DecodeJob::Play { path, id },
+            Some(path) => DecodeJob::Play {
+                path,
+                id,
+                seek_pos: 0.0,
+            },
             None => DecodeJob::None,
         }
     }
@@ -237,9 +331,14 @@ impl PlaybackController {
             {
                 Some(path) => {
                     let id = self.current_track_id.unwrap();
+                    self.saved_position = 0.0;
                     self.state = CtrlState::Playing;
                     self.ended_track_handled = false;
-                    return DecodeJob::Play { path, id };
+                    return DecodeJob::Play {
+                        path,
+                        id,
+                        seek_pos: 0.0,
+                    };
                 }
                 None => return DecodeJob::None,
             }
@@ -259,10 +358,15 @@ impl PlaybackController {
         self.queue_index = Some(prev);
         let id = self.queue[prev];
         self.current_track_id = Some(id);
+        self.saved_position = 0.0;
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
         match self.find_track_path(id) {
-            Some(path) => DecodeJob::Play { path, id },
+            Some(path) => DecodeJob::Play {
+                path,
+                id,
+                seek_pos: 0.0,
+            },
             None => DecodeJob::None,
         }
     }
@@ -297,9 +401,14 @@ impl PlaybackController {
                 && let Some(id) = self.current_track_id
                 && let Some(path) = self.find_track_path(id)
             {
+                self.saved_position = 0.0;
                 self.state = CtrlState::Playing;
                 self.ended_track_handled = false;
-                return DecodeJob::Play { path, id };
+                return DecodeJob::Play {
+                    path,
+                    id,
+                    seek_pos: 0.0,
+                };
             }
 
             // Otherwise advance to next track (honouring repeat/shuffle).
@@ -312,6 +421,7 @@ impl PlaybackController {
     // ── Simple state changes (no decode needed) ──
 
     pub fn pause(&mut self) {
+        self.saved_position = self.position_secs();
         self.state = CtrlState::Paused;
         let _ = self.player().send(PlayerCommand::Pause);
     }
@@ -322,6 +432,7 @@ impl PlaybackController {
     }
 
     pub fn seek(&mut self, pos_secs: f64) {
+        self.saved_position = pos_secs;
         let _ = self.player().send(PlayerCommand::Seek(pos_secs));
     }
 
@@ -331,6 +442,7 @@ impl PlaybackController {
             let _ = player.send(PlayerCommand::Stop);
         }
         self.current_track_id = None;
+        self.saved_position = 0.0;
         self.state = CtrlState::Stopped;
     }
 
@@ -383,16 +495,17 @@ impl PlaybackController {
 
     // ── Apply decoded audio ──
 
-    pub fn apply_decoded(&mut self, decoded: DecodedAudio, id: u64) {
+    pub fn apply_decoded(&mut self, decoded: DecodedAudio, id: u64, seek_pos: f64) {
         if let Some(old_id) = self.current_track_id
             && old_id != id
         {
             self.push_history(old_id);
         }
         self.current_track_id = Some(id);
+        self.saved_position = seek_pos;
         self.state = CtrlState::Playing;
         self.ended_track_handled = false;
-        let _ = self.player().send(PlayerCommand::Play(decoded, 0.0));
+        let _ = self.player().send(PlayerCommand::Play(decoded, seek_pos));
     }
 
     // ── History ──
@@ -419,7 +532,7 @@ impl PlaybackController {
                 return (pos as f64 / total as f64) * dur;
             }
         }
-        0.0
+        self.saved_position
     }
 
     // ── Queue helpers ──
@@ -438,11 +551,21 @@ impl PlaybackController {
         {
             return;
         }
-        self.queue.remove(index);
-        if let Some(ref mut qi) = self.queue_index
-            && index < *qi
-        {
-            *qi -= 1;
+        let removed_id = self.queue.remove(index);
+        if let Some(ref mut qi) = self.queue_index {
+            if index < *qi {
+                *qi -= 1;
+            }
+        }
+        // If queue became empty, clear current track
+        if self.queue.is_empty() {
+            self.queue_index = None;
+            self.current_track_id = None;
+            self.state = CtrlState::Stopped;
+        } else if self.current_track_id == Some(removed_id) {
+            self.queue_index = None;
+            self.current_track_id = None;
+            self.state = CtrlState::Stopped;
         }
     }
 
@@ -621,9 +744,9 @@ pub fn execute_decode_job(
     handle: &AppHandle,
 ) {
     loop {
-        let (path, id) = match job {
+        let (path, id, seek_pos) = match job {
             DecodeJob::None => return,
-            DecodeJob::Play { path, id } => (path, id),
+            DecodeJob::Play { path, id, seek_pos } => (path, id, seek_pos),
         };
 
         let decoded = match decode_file(&path) {
@@ -642,12 +765,16 @@ pub fn execute_decode_job(
 
         let state_dto = {
             let mut c = ctrl.lock().unwrap();
-            c.apply_decoded(decoded, id);
+            c.apply_decoded(decoded, id, seek_pos);
+            crate::save_playback_config(handle, &c);
             c.state_dto()
         };
 
         let _ = handle.emit("playback_state", &state_dto);
-        let _ = handle.emit("track_changed", serde_json::json!({ "track_id": id }));
+        let _ = handle.emit(
+            "track_changed",
+            serde_json::json!({ "track_id": id }),
+        );
         return;
     }
 }

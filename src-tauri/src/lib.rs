@@ -8,6 +8,8 @@ mod models;
 mod mpris;
 mod platform;
 mod tray;
+pub mod paths;
+pub mod logger;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -74,7 +76,7 @@ async fn pick_music_folder(
     // Persist full list to store.
     {
         use tauri_plugin_store::StoreExt;
-        if let Ok(store) = app.store("config.json") {
+        if let Ok(store) = app.store(crate::paths::config_path()) {
             let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
             let arr: serde_json::Value = dirs
                 .iter()
@@ -123,7 +125,7 @@ async fn set_minimize_to_tray(
     }
     // Persist
     use tauri_plugin_store::StoreExt;
-    if let Ok(store) = app.store("config.json") {
+    if let Ok(store) = app.store(crate::paths::config_path()) {
         store.set("minimize_to_tray", serde_json::Value::Bool(enable));
         let _ = store.save();
     }
@@ -149,7 +151,7 @@ async fn set_queue_replace_mode(
     }
     // Persist
     use tauri_plugin_store::StoreExt;
-    if let Ok(store) = app.store("config.json") {
+    if let Ok(store) = app.store(crate::paths::config_path()) {
         store.set("queue_replace_mode", serde_json::Value::Bool(enabled));
         let _ = store.save();
     }
@@ -201,7 +203,7 @@ async fn remove_music_dir(
     // Persist updated list.
     {
         use tauri_plugin_store::StoreExt;
-        if let Ok(store) = app.store("config.json") {
+        if let Ok(store) = app.store(crate::paths::config_path()) {
             let dirs = state.music_dirs.lock().map_err(|e| e.to_string())?;
             let arr: serde_json::Value = dirs
                 .iter()
@@ -228,6 +230,42 @@ async fn remove_music_dir(
     });
 
     Ok(())
+}
+
+/// Persist current playback state (last track path, progress, volume, shuffle, repeat, queue) to config.json
+pub(crate) fn save_playback_config(app: &AppHandle, ctrl: &PlaybackController) {
+    use tauri_plugin_store::StoreExt;
+    if let Ok(store) = app.store(crate::paths::config_path()) {
+        if let Some(path) = ctrl.current_track_path() {
+            store.set(
+                "last_track_path",
+                serde_json::Value::String(path.to_string_lossy().into_owned()),
+            );
+        }
+        store.set("last_position", serde_json::json!(ctrl.position_secs()));
+        store.set("volume", serde_json::json!(ctrl.volume));
+        store.set("shuffle", serde_json::json!(ctrl.shuffle));
+        store.set(
+            "repeat",
+            serde_json::Value::String(
+                match ctrl.repeat {
+                    crate::models::playlist::RepeatMode::None => "none",
+                    crate::models::playlist::RepeatMode::One => "one",
+                    crate::models::playlist::RepeatMode::All => "all",
+                }
+                .to_string(),
+            ),
+        );
+        let q_paths = ctrl.current_queue_paths();
+        if !q_paths.is_empty() {
+            let q_val: serde_json::Value = q_paths
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect();
+            store.set("last_queue_paths", q_val);
+        }
+        let _ = store.save();
+    }
 }
 
 /// Run a blocking library scan over all configured directories on a background thread.
@@ -259,14 +297,24 @@ fn scan_all_libraries(app: AppHandle, dirs: Vec<PathBuf>) {
         dirs.len()
     );
 
-    {
+    let (dto, pos_payload) = {
         let state = app.state::<CawState>();
         let mut ctrl = state.ctrl.lock().unwrap();
         ctrl.set_library(merged);
         ctrl.scanning = false;
-    }
+        let dto = ctrl.state_dto();
+        let pos = PositionPayload {
+            current: ctrl.position_secs(),
+            total: ctrl.current_track_duration(),
+            is_playing: ctrl.state == CtrlState::Playing,
+            track_id: ctrl.current_track_id,
+        };
+        (dto, pos)
+    };
 
     let _ = app.emit("library_updated", serde_json::json!({}));
+    let _ = app.emit("playback_state", &dto);
+    let _ = app.emit("position", &pos_payload);
 }
 
 /// Return the full library as DTOs.
@@ -438,6 +486,7 @@ fn pause(app: AppHandle, state: tauri::State<CawState>) -> Result<(), String> {
     let dto = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.pause();
+        save_playback_config(&app, &ctrl);
         ctrl.state_dto()
     };
     let _ = app.emit("playback_state", &dto);
@@ -484,6 +533,7 @@ fn seek(app: AppHandle, state: tauri::State<CawState>, sec: f64) -> Result<(), S
     let dto = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.seek(sec);
+        save_playback_config(&app, &ctrl);
         ctrl.state_dto()
     };
     let _ = app.emit("playback_state", &dto);
@@ -492,9 +542,10 @@ fn seek(app: AppHandle, state: tauri::State<CawState>, sec: f64) -> Result<(), S
 
 /// Set volume (0.0 – 1.0).
 #[tauri::command]
-fn set_volume(state: tauri::State<CawState>, vol: f32) -> Result<(), String> {
+fn set_volume(app: AppHandle, state: tauri::State<CawState>, vol: f32) -> Result<(), String> {
     let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
     ctrl.set_volume(vol);
+    save_playback_config(&app, &ctrl);
     Ok(())
 }
 
@@ -516,6 +567,7 @@ fn set_shuffle(app: AppHandle, state: tauri::State<CawState>, on: bool) -> Resul
     let dto = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.set_shuffle(on);
+        save_playback_config(&app, &ctrl);
         ctrl.state_dto()
     };
     let _ = app.emit("playback_state", &dto);
@@ -534,6 +586,7 @@ fn set_repeat(app: AppHandle, state: tauri::State<CawState>, mode: String) -> Re
     let dto = {
         let mut ctrl = state.ctrl.lock().map_err(|e| e.to_string())?;
         ctrl.set_repeat(rpt);
+        save_playback_config(&app, &ctrl);
         ctrl.state_dto()
     };
     let _ = app.emit("playback_state", &dto);
@@ -716,10 +769,31 @@ pub fn run() {
             queue_replace_mode: Mutex::new(true), // default: replace mode on
         })
         .setup(|app| {
+            crate::log_info!("caw: starting up — directory unified at {:?}", crate::paths::caw_dir());
+
+            // ── Resolution-aware window sizing (2K: 1600x1200; 1080p: 1200x900) ──
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let size = monitor.size();
+                    let scale_factor = monitor.scale_factor();
+                    let screen_w = size.width as f64 / scale_factor;
+                    let screen_h = size.height as f64 / scale_factor;
+
+                    // Scale relative to 2K (2560x1440 baseline: 1600x1200)
+                    // On 1080p (1920x1080), scale is 0.75 -> 1200x900
+                    let scale = (screen_w / 2560.0).min(screen_h / 1440.0).clamp(0.6, 1.5);
+                    let target_w = (1600.0 * scale).round();
+                    let target_h = (1200.0 * scale).round();
+
+                    let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
+                    let _ = window.center();
+                }
+            }
+
             // ── Restore persisted music dirs and start background scan ──
             {
                 use tauri_plugin_store::StoreExt;
-                if let Ok(store) = app.store("config.json") {
+                if let Ok(store) = app.store(crate::paths::config_path()) {
                     // Try new format: "music_dirs" as JSON array.
                     let mut dirs: Vec<PathBuf> = Vec::new();
                     if let Some(val) = store.get("music_dirs")
@@ -784,7 +858,7 @@ pub fn run() {
             // ── Read persistable minimze_to_tray setting ──
             {
                 use tauri_plugin_store::StoreExt;
-                if let Ok(store) = app.store("config.json")
+                if let Ok(store) = app.store(crate::paths::config_path())
                     && let Some(val) = store.get("minimize_to_tray")
                     && let Some(b) = val.as_bool()
                 {
@@ -795,7 +869,7 @@ pub fn run() {
             // ── Read persisted queue_replace_mode setting ──
             {
                 use tauri_plugin_store::StoreExt;
-                if let Ok(store) = app.store("config.json")
+                if let Ok(store) = app.store(crate::paths::config_path())
                     && let Some(val) = store.get("queue_replace_mode")
                     && let Some(b) = val.as_bool()
                 {
@@ -803,9 +877,57 @@ pub fn run() {
                 }
             }
 
+            // ── Read persisted playback settings (last track, position, queue, volume, shuffle, repeat) ──
+            {
+                use tauri_plugin_store::StoreExt;
+                if let Ok(store) = app.store(crate::paths::config_path()) {
+                    let state = app.state::<CawState>();
+                    let mut ctrl = state.ctrl.lock().unwrap();
+
+                    if let Some(val) = store.get("volume")
+                        && let Some(v) = val.as_f64()
+                    {
+                        ctrl.set_volume(v as f32);
+                    }
+                    if let Some(val) = store.get("shuffle")
+                        && let Some(b) = val.as_bool()
+                    {
+                        ctrl.shuffle = b;
+                    }
+                    if let Some(val) = store.get("repeat")
+                        && let Some(s) = val.as_str()
+                    {
+                        ctrl.repeat = match s {
+                            "one" => crate::models::playlist::RepeatMode::One,
+                            "all" => crate::models::playlist::RepeatMode::All,
+                            _ => crate::models::playlist::RepeatMode::None,
+                        };
+                    }
+                    if let Some(val) = store.get("last_track_path")
+                        && let Some(s) = val.as_str()
+                    {
+                        ctrl.saved_track_path = Some(s.to_string());
+                    }
+                    if let Some(val) = store.get("last_position")
+                        && let Some(pos) = val.as_f64()
+                    {
+                        ctrl.saved_position = pos;
+                    }
+                    if let Some(val) = store.get("last_queue_paths")
+                        && let Some(arr) = val.as_array()
+                    {
+                        ctrl.saved_queue_paths = arr
+                            .iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect();
+                    }
+                }
+            }
+
             // ── Position tick + auto-advance task ──
             let tick_handle = app.handle().clone();
             std::thread::spawn(move || {
+                let mut tick_count: u64 = 0;
                 loop {
                     std::thread::sleep(Duration::from_millis(250));
 
@@ -828,7 +950,7 @@ pub fn run() {
                         };
                     }
 
-                    // 2. Emit position event (only when a track is loaded).
+                    // 2. Emit position event & periodic persistence save
                     if ctrl.current_track_id.is_some() {
                         let payload = PositionPayload {
                             current: ctrl.position_secs(),
@@ -836,6 +958,10 @@ pub fn run() {
                             is_playing: ctrl.state == CtrlState::Playing,
                             track_id: ctrl.current_track_id,
                         };
+                        tick_count = tick_count.wrapping_add(1);
+                        if tick_count % 8 == 0 {
+                            save_playback_config(&tick_handle, &ctrl);
+                        }
                         drop(ctrl);
                         let _ = tick_handle.emit("position", &payload);
                     } else {
@@ -849,9 +975,19 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.app_handle().state::<CawState>();
+                {
+                    if let Ok(ctrl) = state.ctrl.lock() {
+                        save_playback_config(window.app_handle(), &ctrl);
+                    }
+                }
                 if *state.minimize_to_tray.lock().unwrap() {
                     api.prevent_close();
                     let _ = window.hide();
+                }
+            } else if let tauri::WindowEvent::Destroyed = event {
+                let state = window.app_handle().state::<CawState>();
+                if let Ok(ctrl) = state.ctrl.lock() {
+                    save_playback_config(window.app_handle(), &ctrl);
                 }
             }
         })
@@ -898,5 +1034,5 @@ pub fn run() {
             get_system_fonts,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Caw Tauri application");
+        .expect("error while running caw application");
 }

@@ -1,28 +1,63 @@
 <template>
-  <div v-if="artistData" class="flex flex-col h-full">
-    <!-- Header -->
-    <div class="flex gap-6 p-6 pb-4 flex-shrink-0 items-end">
+  <div v-if="artistData" class="flex flex-col h-full bg-background select-none">
+    <!-- Header Hero -->
+    <div class="flex gap-6 p-7 pb-6 flex-shrink-0 items-end border-b border-border relative overflow-hidden">
+      <!-- Gradient Backdrop Glow -->
       <div
-        class="w-48 h-48 rounded-lg flex items-center justify-center flex-shrink-0 shadow-1"
+        class="absolute -top-24 -left-24 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none"
         :style="{ background: coverGradient(artistData.name) }"
-      >
-        <span class="text-white text-7xl font-bold select-none">{{ artistData.name.charAt(0) }}</span>
+      />
+
+      <!-- Circular Hero Avatar (Strictly 1:1 circle) -->
+      <div class="relative w-40 h-40 rounded-full flex-shrink-0 flex items-center justify-center z-10 shadow-3">
+        <CoverArt
+          v-if="artistData.trackIds.length > 0"
+          :track-id="artistData.trackIds[0]"
+          :size="160"
+          :round="true"
+          class="w-40 h-40 rounded-full object-cover shadow-2 ring-4 ring-border/80"
+        />
+        <div
+          v-else
+          class="w-40 h-40 rounded-full flex items-center justify-center text-white text-6xl font-extrabold shadow-2 ring-4 ring-border/80 relative overflow-hidden"
+          :style="{ background: coverGradient(artistData.name) }"
+        >
+          <div class="absolute inset-0 bg-gradient-to-tr from-black/20 via-transparent to-white/20 pointer-events-none" />
+          <span class="relative z-10 drop-shadow">
+            {{ artistData.name.charAt(0).toUpperCase() }}
+          </span>
+        </div>
       </div>
-      <div class="flex flex-col justify-end gap-2 min-w-0">
-        <p class="text-overline">艺术家</p>
-        <h1 class="text-display text-foreground">{{ artistData.name }}</h1>
-        <p class="text-body-sm text-faint-foreground">
-          {{ artistData.trackCount }} tracks · {{ artistData.albumCount }} albums
-        </p>
-        <div class="flex items-center gap-2 mt-2">
+
+      <div class="flex flex-col justify-end gap-2.5 min-w-0 flex-1 relative z-10">
+        <div class="flex items-center gap-2">
+          <span class="text-overline px-2.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">艺术家</span>
+          <span class="text-xs text-muted-foreground">
+            {{ artistData.trackCount }} 首歌曲 · {{ artistData.albumCount }} 张专辑
+          </span>
+        </div>
+
+        <h1 class="text-display text-foreground font-bold tracking-tight truncate">
+          {{ artistData.name }}
+        </h1>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-3 mt-2">
           <button
-            class="w-12 h-12 rounded-full bg-primary text-background flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-1"
+            class="h-10 px-5 rounded-full bg-primary text-primary-foreground flex items-center gap-2 font-medium shadow-md hover:scale-105 active:scale-95 hover:bg-primary-hover transition-all cursor-pointer"
             @click="playAll"
           >
-            <Play class="w-5 h-5 ml-0.5 fill-background" />
+            <Play class="w-4 h-4 fill-primary-foreground" />
+            播放全部
           </button>
-          <Button variant="ghost" size="sm" @click="view.closeDetail()">
-            <ArrowLeft class="w-4 h-4 mr-1" />
+
+          <Button variant="secondary" size="md" circle class="h-10 px-4" @click="shuffleAll">
+            <Shuffle class="w-4 h-4 mr-1.5" />
+            随机播放
+          </Button>
+
+          <Button variant="ghost" size="md" @click="view.closeDetail()">
+            <ArrowLeft class="w-4 h-4 mr-1.5" />
             返回
           </Button>
         </div>
@@ -38,11 +73,12 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { Play, ArrowLeft } from "lucide-vue-next";
+import { Play, Shuffle, ArrowLeft } from "lucide-vue-next";
 import { useViewStore } from "@/stores/view";
 import { coverGradient } from "@/lib/utils";
 import { usePlaybackStore } from "@/stores/playback";
 import TrackTable from "@/components/TrackTable.vue";
+import CoverArt from "@/components/CoverArt.vue";
 import Button from "@/components/ui/Button.vue";
 
 const view = useViewStore();
@@ -57,5 +93,14 @@ function playAll() {
   if (!artistData.value) return;
   const ids = artistData.value.trackIds;
   if (ids.length > 0) playback.playTracks(ids, ids[0]);
+}
+
+function shuffleAll() {
+  if (!artistData.value) return;
+  const ids = [...artistData.value.trackIds];
+  if (ids.length === 0) return;
+  playback.setShuffle(true);
+  const randomIdx = Math.floor(Math.random() * ids.length);
+  playback.playTracks(ids, ids[randomIdx]);
 }
 </script>

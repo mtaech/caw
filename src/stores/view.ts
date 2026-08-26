@@ -53,6 +53,7 @@ export const useViewStore = defineStore("view", () => {
   const sortDir = ref<"asc" | "desc">("asc");
   const detail = ref<DetailTarget>(null);
   const selectedTrackId = ref<number | null>(null);
+  const locateRequestTrigger = ref(0);
   
   // ── Multi-selection (for batch ops like add to playlist) ──
   const selectedTrackIds = ref(new Set<number>());
@@ -307,6 +308,28 @@ export const useViewStore = defineStore("view", () => {
     playback.value.playTracks(ids, id);
   }
 
+  function locateTrack(trackId?: number) {
+    const targetId = trackId ?? playback.value.currentTrackId;
+    if (targetId === null || targetId === undefined) return;
+
+    if (nav.value !== "all-music" || detail.value !== null) {
+      nav.value = "all-music";
+      detail.value = null;
+    }
+
+    if (searchQuery.value) {
+      const isInSearch = filteredTracks.value.some((t) => t.id === targetId);
+      if (!isInSearch) {
+        searchQuery.value = "";
+      }
+    }
+
+    selectedTrackId.value = targetId;
+    selectedTrackIds.value = new Set([targetId]);
+    lastClickedId.value = targetId;
+    locateRequestTrigger.value++;
+  }
+
   return {
     nav,
     searchQuery,
@@ -332,6 +355,8 @@ export const useViewStore = defineStore("view", () => {
     setSelectedTrack,
     playAll,
     playTrackById,
+    locateTrack,
+    locateRequestTrigger,
     saveColumnWidths,
     resetColumnWidths,
   };

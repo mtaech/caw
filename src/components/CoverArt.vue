@@ -2,33 +2,43 @@
   <div
     :class="
       cn(
-        'flex-shrink-0 overflow-hidden',
-        round ? 'rounded-full' : 'rounded-lg',
+        'relative flex-shrink-0 overflow-hidden select-none bg-elevated transition-transform duration-200 ring-1 ring-black/5 dark:ring-white/10',
+        round ? 'rounded-full' : 'rounded-lg shadow-sm',
       )
     "
     :style="{ width: size + 'px', height: size + 'px' }"
   >
-    <img
-      v-if="coverUrl"
-      :src="coverUrl"
-      class="w-full h-full object-cover"
-      alt="cover"
-      @error="onError"
-    />
+    <!-- Actual Cover Image with cross-fade -->
+    <Transition name="fade">
+      <img
+        v-if="coverUrl"
+        :key="coverUrl"
+        :src="coverUrl"
+        class="w-full h-full object-cover select-none pointer-events-none"
+        alt="cover"
+        @error="onError"
+      />
+    </Transition>
+
     <!-- Loading skeleton -->
     <div
-      v-else-if="loading"
-      class="w-full h-full bg-elevated-hover animate-pulse"
-    />
+      v-if="loading && !coverUrl"
+      class="w-full h-full bg-elevated-hover animate-pulse flex items-center justify-center"
+    >
+      <Disc3 class="text-muted-foreground/40 animate-spin" :size="size * 0.35" />
+    </div>
+
     <!-- Gradient placeholder (deterministic per track) -->
     <div
-      v-else
-      class="w-full h-full flex items-center justify-center"
+      v-else-if="!coverUrl"
+      class="w-full h-full flex items-center justify-center relative overflow-hidden"
       :style="{ background: gradient }"
     >
+      <!-- Subtle internal gloss / lighting overlay -->
+      <div class="absolute inset-0 bg-gradient-to-tr from-black/20 via-transparent to-white/20 pointer-events-none" />
       <Music
-        :class="round ? 'text-white/85' : 'text-white/90'"
-        :size="size * 0.35"
+        class="text-white/90 drop-shadow relative z-10"
+        :size="size * 0.38"
       />
     </div>
   </div>
@@ -36,7 +46,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
-import { Music } from "lucide-vue-next";
+import { Music, Disc3 } from "lucide-vue-next";
 import { cn, coverGradient } from "@/lib/utils";
 import { usePlaybackStore } from "@/stores/playback";
 
@@ -54,7 +64,6 @@ const coverUrl = ref<string | null>(null);
 const errored = ref(false);
 const loading = ref(false);
 
-// Stable gradient keyed on the track id so the placeholder never flickers.
 const gradient = computed(() => coverGradient(String(props.trackId)));
 
 async function loadCover() {
@@ -96,3 +105,14 @@ watch(
   },
 );
 </script>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

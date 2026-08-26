@@ -225,6 +225,5 @@ impl Database {
 }
 
 fn db_path() -> PathBuf {
-    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("caw").join("caw.db")
+    crate::paths::db_path()
 }

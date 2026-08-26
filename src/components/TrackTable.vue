@@ -1,27 +1,27 @@
 <template>
-  <div class="flex flex-col h-full select-none">
-    <!-- Header -->
+  <div class="flex flex-col h-full select-none relative bg-background">
+    <!-- Sticky Table Header -->
     <div
-      class="flex items-center border-b border-border px-4 h-9 text-caption text-muted-foreground uppercase tracking-wider flex-shrink-0"
+      class="flex items-center border-b border-border/70 px-4 h-9 text-caption text-muted-foreground uppercase tracking-wider flex-shrink-0 bg-elevated/40 backdrop-blur-sm z-10"
     >
       <!-- # / Track Number -->
       <div
         class="relative flex items-center justify-center flex-shrink-0 cursor-pointer hover:text-foreground transition-colors h-full"
         :style="{ width: view.columnWidths.index + 'px' }"
-        :class="{ 'text-foreground': view.sortKey === 'track_number' }"
-        @click="handleSort('track_number')"
+        :class="{ 'text-primary font-semibold': view.sortKey === 'track_number' }"
+        @click="view.setSort('track_number')"
       >
         <span>#</span>
         <template v-if="view.sortKey === 'track_number'">
-          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 ml-0.5" />
-          <ChevronDown v-else class="w-3 h-3 ml-0.5" />
+          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 ml-0.5 text-primary" />
+          <ChevronDown v-else class="w-3 h-3 ml-0.5 text-primary" />
         </template>
         <!-- Resize handle: Index / Title -->
         <div
-          class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center z-10 group/handle"
+          class="absolute -right-1 top-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center z-10 group/handle"
           title="拖动调整列宽，双击重置"
           @mousedown.stop.prevent="startResize('index-title', $event)"
-          @dblclick.stop.prevent="resetCol('index')"
+          @dblclick.stop.prevent="view.resetColumnWidths()"
           @click.stop
         >
           <div
@@ -34,20 +34,20 @@
       <!-- Title -->
       <div
         class="relative flex items-center gap-1 min-w-0 flex-1 cursor-pointer hover:text-foreground transition-colors pl-3 h-full"
-        :class="{ 'text-foreground': view.sortKey === 'title' }"
-        @click="handleSort('title')"
+        :class="{ 'text-primary font-semibold': view.sortKey === 'title' }"
+        @click="view.setSort('title')"
       >
         <span class="truncate">标题</span>
         <template v-if="view.sortKey === 'title'">
-          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0" />
-          <ChevronDown v-else class="w-3 h-3 flex-shrink-0" />
+          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0 text-primary" />
+          <ChevronDown v-else class="w-3 h-3 flex-shrink-0 text-primary" />
         </template>
         <!-- Resize handle: Title / Artist -->
         <div
-          class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center z-10 group/handle"
+          class="absolute -right-1 top-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center z-10 group/handle"
           title="拖动调整列宽，双击重置"
           @mousedown.stop.prevent="startResize('title-artist', $event)"
-          @dblclick.stop.prevent="resetCol('artist')"
+          @dblclick.stop.prevent="view.resetColumnWidths()"
           @click.stop
         >
           <div
@@ -61,20 +61,20 @@
       <div
         class="relative flex items-center gap-1 flex-shrink-0 cursor-pointer hover:text-foreground transition-colors pl-3 h-full"
         :style="{ width: view.columnWidths.artist + 'px' }"
-        :class="{ 'text-foreground': view.sortKey === 'artist' }"
-        @click="handleSort('artist')"
+        :class="{ 'text-primary font-semibold': view.sortKey === 'artist' }"
+        @click="view.setSort('artist')"
       >
         <span class="truncate">艺人</span>
         <template v-if="view.sortKey === 'artist'">
-          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0" />
-          <ChevronDown v-else class="w-3 h-3 flex-shrink-0" />
+          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0 text-primary" />
+          <ChevronDown v-else class="w-3 h-3 flex-shrink-0 text-primary" />
         </template>
         <!-- Resize handle: Artist / Album -->
         <div
-          class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center z-10 group/handle"
+          class="absolute -right-1 top-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center z-10 group/handle"
           title="拖动调整列宽，双击重置"
           @mousedown.stop.prevent="startResize('artist-album', $event)"
-          @dblclick.stop.prevent="resetCol('artist-album')"
+          @dblclick.stop.prevent="view.resetColumnWidths()"
           @click.stop
         >
           <div
@@ -88,20 +88,20 @@
       <div
         class="relative flex items-center gap-1 flex-shrink-0 cursor-pointer hover:text-foreground transition-colors pl-3 h-full"
         :style="{ width: view.columnWidths.album + 'px' }"
-        :class="{ 'text-foreground': view.sortKey === 'album' }"
-        @click="handleSort('album')"
+        :class="{ 'text-primary font-semibold': view.sortKey === 'album' }"
+        @click="view.setSort('album')"
       >
         <span class="truncate">专辑</span>
         <template v-if="view.sortKey === 'album'">
-          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0" />
-          <ChevronDown v-else class="w-3 h-3 flex-shrink-0" />
+          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0 text-primary" />
+          <ChevronDown v-else class="w-3 h-3 flex-shrink-0 text-primary" />
         </template>
         <!-- Resize handle: Album / Duration -->
         <div
-          class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize flex items-center justify-center z-10 group/handle"
+          class="absolute -right-1 top-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center z-10 group/handle"
           title="拖动调整列宽，双击重置"
           @mousedown.stop.prevent="startResize('album-duration', $event)"
-          @dblclick.stop.prevent="resetCol('album-duration')"
+          @dblclick.stop.prevent="view.resetColumnWidths()"
           @click.stop
         >
           <div
@@ -113,33 +113,33 @@
 
       <!-- Duration -->
       <div
-        class="relative flex items-center gap-1 flex-shrink-0 cursor-pointer hover:text-foreground transition-colors pl-3 h-full"
+        class="relative flex items-center gap-1 flex-shrink-0 cursor-pointer hover:text-foreground transition-colors pl-3 pr-2 h-full justify-end"
         :style="{ width: view.columnWidths.duration + 'px' }"
-        :class="{ 'text-foreground': view.sortKey === 'duration' }"
-        @click="handleSort('duration')"
+        :class="{ 'text-primary font-semibold': view.sortKey === 'duration' }"
+        @click="view.setSort('duration')"
       >
         <span class="truncate">时长</span>
         <template v-if="view.sortKey === 'duration'">
-          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0" />
-          <ChevronDown v-else class="w-3 h-3 flex-shrink-0" />
+          <ChevronUp v-if="view.sortDir === 'asc'" class="w-3 h-3 flex-shrink-0 text-primary" />
+          <ChevronDown v-else class="w-3 h-3 flex-shrink-0 text-primary" />
         </template>
       </div>
     </div>
 
     <!-- Virtualized rows -->
-    <div ref="parentRef" class="flex-1 overflow-auto select-none">
+    <div ref="parentRef" class="flex-1 overflow-auto select-none px-2 py-1" @scroll="onScroll">
       <div v-if="virtualizer" class="relative" :style="{ height: virtualizer.getTotalSize() + 'px' }">
         <div
           v-for="row in virtualRows"
           :key="row.key"
-          class="group flex items-center px-4 border-b border-border/40 transition-colors duration-120 cursor-pointer absolute top-0 left-0 w-full"
+          class="group flex items-center px-2.5 rounded-lg transition-colors duration-120 cursor-pointer absolute top-0 left-0 w-full"
           :style="{
             height: row.size + 'px',
             transform: `translateY(${row.start}px)`,
           }"
           :class="rowClasses(row._track)"
           @dblclick="view.playTrackById(row._track.id)"
-          @click="handleRowClick(row._track.id, $event)"
+          @click="view.selectTrack(row._track.id, $event)"
           @contextmenu.prevent="showContextMenu(row._track, $event)"
         >
           <!-- # / now playing indicator -->
@@ -147,18 +147,24 @@
             class="flex items-center justify-center flex-shrink-0"
             :style="{ width: view.columnWidths.index + 'px' }"
           >
-            <Play
+            <!-- Animated Equalizer if playing -->
+            <div
               v-if="row._track.id === playback.currentTrackId && playback.isPlaying"
-              class="w-3 h-3 text-primary fill-primary"
+              class="flex items-center gap-0.5 h-3.5"
+            >
+              <span class="w-0.5 h-2.5 bg-primary rounded-full eq-bar-1" />
+              <span class="w-0.5 h-3.5 bg-primary rounded-full eq-bar-2" />
+              <span class="w-0.5 h-2 bg-primary rounded-full eq-bar-3" />
+            </div>
+            <!-- Static Play Icon if paused current track -->
+            <Play
+              v-else-if="row._track.id === playback.currentTrackId"
+              class="w-3.5 h-3.5 text-primary fill-primary"
             />
+            <!-- Ordinary Track Index -->
             <span
               v-else
-              class="text-caption"
-              :class="
-                row._track.id === playback.currentTrackId
-                  ? 'text-primary font-medium'
-                  : 'text-faint-foreground'
-              "
+              class="text-caption text-faint-foreground group-hover:text-foreground font-mono"
             >
               {{ row.index + 1 }}
             </span>
@@ -166,48 +172,52 @@
 
           <!-- Title -->
           <div
-            class="truncate text-body flex-1 min-w-0 pl-3"
-            :class="{ 'text-body-md text-primary': row._track.id === playback.currentTrackId }"
+            class="truncate text-body flex-1 min-w-0 pl-3 font-medium"
+            :class="{ 'text-primary font-semibold': row._track.id === playback.currentTrackId }"
           >
             {{ row._track.title }}
           </div>
 
-          <!-- Artist -->
+          <!-- Artist (Clickable to jump to artist view) -->
           <div
-            class="truncate text-body-sm text-muted-foreground flex-shrink-0 pl-3"
+            class="truncate text-body-sm text-muted-foreground hover:text-foreground flex-shrink-0 pl-3 transition-colors"
             :style="{ width: view.columnWidths.artist + 'px' }"
+            @click.stop="view.openArtist(row._track.artist)"
           >
             {{ row._track.artist }}
           </div>
 
-          <!-- Album -->
+          <!-- Album (Clickable to jump to album view) -->
           <div
-            class="truncate text-body-sm text-muted-foreground flex-shrink-0 pl-3"
+            class="truncate text-body-sm text-muted-foreground hover:text-foreground flex-shrink-0 pl-3 transition-colors"
             :style="{ width: view.columnWidths.album + 'px' }"
+            @click.stop="view.openAlbum(row._track.album)"
           >
             {{ row._track.album }}
           </div>
 
-          <!-- Duration + actions -->
+          <!-- Duration + Action Menu Button -->
           <div
             class="flex items-center justify-between flex-shrink-0 pl-3 pr-1"
             :style="{ width: view.columnWidths.duration + 'px' }"
           >
-            <span class="text-body-sm text-muted-foreground tabular-nums truncate">
-              {{ fmt(row._track.duration_secs) }}
+            <span class="text-body-sm text-muted-foreground tabular-nums truncate font-mono text-xs">
+              {{ formatDuration(row._track.duration_secs) }}
             </span>
+            
             <div class="relative" @click.stop>
               <button
-                class="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary transition-all p-0.5 rounded flex-shrink-0"
+                class="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary hover:bg-elevated-hover transition-all p-1 rounded-md flex-shrink-0"
                 title="添加到播放列表"
-                @click="toggleAddMenu(row._track.id, $event)"
+                @click="toggleAddMenu(row._track.id)"
               >
                 <Plus class="w-3.5 h-3.5" />
               </button>
+              
               <!-- Add-to-playlist dropdown -->
               <div
                 v-if="addMenuTrackId === row._track.id"
-                class="absolute right-0 top-full mt-1 w-44 bg-elevated border border-border rounded-lg shadow-2 z-dropdown py-1 max-h-64 overflow-auto"
+                class="absolute right-0 top-full mt-1 w-48 bg-elevated border border-border rounded-xl shadow-2 z-dropdown py-1.5 max-h-64 overflow-auto backdrop-blur-md"
               >
                 <p v-if="plStore.playlists.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
                   暂无播放列表
@@ -215,10 +225,10 @@
                 <button
                   v-for="pl in plStore.playlists"
                   :key="pl.id"
-                  class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate flex items-center"
+                  class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate flex items-center gap-2"
                   @click.stop="addToPlaylist(pl.id, row._track.id)"
                 >
-                  <ListMusic class="w-3 h-3 mr-2 text-muted-foreground flex-shrink-0" />
+                  <ListMusic class="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                   <span class="truncate">{{ pl.name }}</span>
                 </button>
               </div>
@@ -227,37 +237,59 @@
         </div>
       </div>
     </div>
+
+    <!-- Floating locate button in bottom-right -->
+    <Transition name="locate-btn">
+      <div
+        v-if="showLocateButton"
+        class="absolute bottom-5 right-5 z-20"
+      >
+        <Tooltip :delay="150" side="left" :side-offset="8">
+          <template #trigger>
+            <button
+              class="w-10 h-10 rounded-full flex items-center justify-center bg-elevated/90 hover:bg-elevated text-foreground hover:text-primary border border-border shadow-2 backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer select-none group"
+              aria-label="定位到正在播放歌曲"
+              @click.stop="scrollToCurrentTrack"
+            >
+              <LocateFixed class="w-4 h-4 text-primary group-hover:rotate-45 transition-transform duration-300 flex-shrink-0" />
+            </button>
+          </template>
+          <span>定位到正在播放歌曲</span>
+        </Tooltip>
+      </div>
+    </Transition>
   </div>
 
   <!-- Context menu (right-click) -->
   <div
     v-if="contextMenu"
-    class="fixed z-dropdown w-44 bg-elevated border border-border rounded-lg shadow-2 py-1 max-h-64 overflow-auto"
+    class="fixed z-dropdown w-48 bg-elevated border border-border rounded-xl shadow-3 py-1.5 max-h-64 overflow-auto backdrop-blur-md"
     :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
     @click.stop
   >
     <button
-      class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
+      class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2.5 transition-colors"
       @click="playContextTrack()"
     >
-      <Play class="w-3.5 h-3.5 flex-shrink-0" /> 播放
+      <Play class="w-3.5 h-3.5 text-primary flex-shrink-0" /> 立即播放
     </button>
     <button
-      class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
+      class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2.5 transition-colors"
       @click="playNextContextTrack()"
     >
-      <ListOrdered class="w-3.5 h-3.5 flex-shrink-0" /> 下一首播放
+      <ListOrdered class="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" /> 下一首播放
     </button>
+    <div class="border-t border-border/60 my-1" />
     <div class="relative">
       <button
-        class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2 transition-colors"
-        @click.stop="toggleAddFromContext($event)"
+        class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover flex items-center gap-2.5 transition-colors"
+        @click.stop="toggleAddFromContext()"
       >
-        <Plus class="w-3.5 h-3.5 flex-shrink-0" /> 添加到播放列表
+        <Plus class="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" /> 添加到播放列表
       </button>
       <div
         v-if="showContextAddMenu"
-        class="absolute left-full top-0 ml-1 w-44 bg-elevated border border-border rounded-lg shadow-2 py-1 z-dropdown max-h-64 overflow-auto"
+        class="absolute left-full top-0 ml-1 w-48 bg-elevated border border-border rounded-xl shadow-3 py-1.5 z-dropdown max-h-64 overflow-auto"
       >
         <p
           v-if="plStore.playlists.length === 0"
@@ -268,10 +300,10 @@
         <button
           v-for="pl in plStore.playlists"
           :key="pl.id"
-          class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate flex items-center"
+          class="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-elevated-hover transition-colors truncate flex items-center gap-2"
           @click.stop="addContextTrackToPlaylist(pl.id)"
         >
-          <ListMusic class="w-3 h-3 mr-2 text-muted-foreground flex-shrink-0" />
+          <ListMusic class="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
           <span class="truncate">{{ pl.name }}</span>
         </button>
       </div>
@@ -280,25 +312,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Play, ChevronUp, ChevronDown, Plus, ListMusic, ListOrdered } from "lucide-vue-next";
+import { Play, ChevronUp, ChevronDown, Plus, ListMusic, ListOrdered, LocateFixed } from "lucide-vue-next";
 import { usePlaybackStore } from "@/stores/playback";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
+import { formatDuration } from "@/lib/utils";
+import Tooltip from "@/components/ui/Tooltip.vue";
 
 const playback = usePlaybackStore();
 const view = useViewStore();
 const plStore = usePlaylistStore();
 
-const addMenuTrackId = ref<number | null>(null);
-const parentRef = ref<HTMLDivElement | null>(null);
+const parentRef = ref<HTMLElement | null>(null);
 
-const tracks = computed(() => view.filteredTracks);
-
-// v3 takes a reactive options object (computed Ref)
 const virtualizerOptions = computed(() => ({
-  count: tracks.value.length,
+  count: view.filteredTracks.length,
   getScrollElement: () => parentRef.value,
   estimateSize: () => 40,
   overscan: 10,
@@ -309,135 +339,73 @@ const virtualizer = useVirtualizer(virtualizerOptions);
 const virtualRows = computed(() => {
   const v = virtualizer.value;
   if (!v) return [];
-  const range = v.getVirtualItems();
-  return range.map((item: any) => ({
+  return v.getVirtualItems().map((item: any) => ({
     ...item,
-    _track: tracks.value[item.index],
+    _track: view.filteredTracks[item.index],
   }));
 });
 
-// ── Column Resizing ──────────────────────────────────────────────────────────
-
-type ResizeHandle = "index-title" | "title-artist" | "artist-album" | "album-duration";
-
-const resizingHandle = ref<ResizeHandle | null>(null);
-let startX = 0;
-let startWidths = { index: 40, artist: 240, album: 240, duration: 80 };
-let hasMoved = false;
-
-function startResize(handle: ResizeHandle, e: MouseEvent) {
-  resizingHandle.value = handle;
-  startX = e.clientX;
-  startWidths = {
-    index: view.columnWidths.index,
-    artist: view.columnWidths.artist,
-    album: view.columnWidths.album,
-    duration: view.columnWidths.duration,
-  };
-  hasMoved = false;
-
-  document.body.style.cursor = "col-resize";
-  document.body.style.userSelect = "none";
-
-  window.addEventListener("mousemove", onMouseMove);
-  window.addEventListener("mouseup", onMouseUp);
-}
-
-function onMouseMove(e: MouseEvent) {
-  if (!resizingHandle.value) return;
-  const dx = e.clientX - startX;
-  if (Math.abs(dx) > 2) {
-    hasMoved = true;
-  }
-
-  const handle = resizingHandle.value;
-
-  if (handle === "index-title") {
-    view.columnWidths.index = Math.max(32, Math.min(120, Math.round(startWidths.index + dx)));
-  } else if (handle === "title-artist") {
-    // Moving right shrinks artist, expanding title
-    view.columnWidths.artist = Math.max(80, Math.min(600, Math.round(startWidths.artist - dx)));
-  } else if (handle === "artist-album") {
-    const minW = 80;
-    const maxW = 600;
-    const minDx = Math.max(minW - startWidths.artist, startWidths.album - maxW);
-    const maxDx = Math.min(maxW - startWidths.artist, startWidths.album - minW);
-    const clampedDx = Math.max(minDx, Math.min(maxDx, dx));
-    view.columnWidths.artist = Math.round(startWidths.artist + clampedDx);
-    view.columnWidths.album = Math.round(startWidths.album - clampedDx);
-  } else if (handle === "album-duration") {
-    const minAlb = 80;
-    const maxAlb = 600;
-    const minDur = 60;
-    const maxDur = 200;
-    const minDx = Math.max(minAlb - startWidths.album, startWidths.duration - maxDur);
-    const maxDx = Math.min(maxAlb - startWidths.album, startWidths.duration - minDur);
-    const clampedDx = Math.max(minDx, Math.min(maxDx, dx));
-    view.columnWidths.album = Math.round(startWidths.album + clampedDx);
-    view.columnWidths.duration = Math.round(startWidths.duration - clampedDx);
-  }
-}
-
-function onMouseUp() {
-  if (resizingHandle.value) {
-    resizingHandle.value = null;
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-    window.removeEventListener("mousemove", onMouseMove);
-    window.removeEventListener("mouseup", onMouseUp);
-    view.saveColumnWidths();
-    setTimeout(() => {
-      hasMoved = false;
-    }, 50);
-  }
-}
-
-function handleSort(key: any) {
-  if (hasMoved || resizingHandle.value) return;
-  view.setSort(key);
-}
-
-function resetCol(target: "index" | "artist" | "artist-album" | "album-duration") {
-  if (target === "index") {
-    view.columnWidths.index = 40;
-  } else if (target === "artist") {
-    view.columnWidths.artist = 240;
-  } else if (target === "artist-album") {
-    view.columnWidths.artist = 240;
-    view.columnWidths.album = 240;
-  } else if (target === "album-duration") {
-    view.columnWidths.album = 240;
-    view.columnWidths.duration = 80;
-  }
-  view.saveColumnWidths();
-}
-
 function rowClasses(track: any) {
-  const isCurrent = track.id === playback.currentTrackId;
+  const isPlaying = track.id === playback.currentTrackId;
   const isSelected = view.selectedTrackIds.has(track.id);
-  return {
-    "bg-primary/10": isCurrent,
-    "bg-elevated-hover": isSelected && !isCurrent,
-    "hover:bg-elevated-hover": !isCurrent && !isSelected,
-    "text-foreground": true,
+
+  if (isPlaying) {
+    return "bg-primary/10 text-foreground hover:bg-primary/15 font-medium";
+  }
+  if (isSelected) {
+    return "bg-elevated-hover text-foreground";
+  }
+  return "hover:bg-elevated-hover/70 text-foreground";
+}
+
+// ── Context menu ──
+const contextMenu = ref<{ x: number; y: number; track: any } | null>(null);
+const showContextAddMenu = ref(false);
+
+function showContextMenu(track: any, event: MouseEvent) {
+  contextMenu.value = {
+    x: Math.min(event.clientX, window.innerWidth - 200),
+    y: Math.min(event.clientY, window.innerHeight - 200),
+    track,
   };
+  showContextAddMenu.value = false;
 }
 
-function fmt(sec: number): string {
-  if (!sec || sec < 0) return "0:00";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function handleRowClick(trackId: number, event?: MouseEvent) {
-  view.selectTrack(trackId, event);
+function closeContextMenu() {
+  contextMenu.value = null;
+  showContextAddMenu.value = false;
   addMenuTrackId.value = null;
+}
+
+function playContextTrack() {
+  if (contextMenu.value) {
+    view.playTrackById(contextMenu.value.track.id);
+  }
   closeContextMenu();
 }
 
-function toggleAddMenu(trackId: number, event: MouseEvent) {
-  event.stopPropagation();
+function playNextContextTrack() {
+  if (contextMenu.value) {
+    playback.playNextTrack(contextMenu.value.track.id);
+  }
+  closeContextMenu();
+}
+
+function toggleAddFromContext() {
+  showContextAddMenu.value = !showContextAddMenu.value;
+}
+
+async function addContextTrackToPlaylist(playlistId: number) {
+  if (contextMenu.value) {
+    await plStore.addTracks(playlistId, [contextMenu.value.track.id]);
+  }
+  closeContextMenu();
+}
+
+// ── Add to playlist quick dropdown ──
+const addMenuTrackId = ref<number | null>(null);
+
+function toggleAddMenu(trackId: number) {
   if (addMenuTrackId.value === trackId) {
     addMenuTrackId.value = null;
   } else {
@@ -445,89 +413,88 @@ function toggleAddMenu(trackId: number, event: MouseEvent) {
   }
 }
 
-function addToPlaylist(playlistId: number, trackId: number) {
-  plStore.addTracks(playlistId, [trackId]);
+async function addToPlaylist(playlistId: number, trackId: number) {
+  await plStore.addTracks(playlistId, [trackId]);
   addMenuTrackId.value = null;
 }
 
-// ── Context menu (right-click) ──
-const contextMenu = ref<{ x: number; y: number; track: any } | null>(null);
-const showContextAddMenu = ref(false);
+// ── Column resizing ──
+const resizingHandle = ref<string | null>(null);
+let startX = 0;
+let initialWidth = 0;
 
-function showContextMenu(track: any, event: MouseEvent) {
-  let x = event.clientX;
-  let y = event.clientY;
-  const ww = window.innerWidth;
-  const wh = window.innerHeight;
-  const mw = 176;
-  const mh = 150;
-  if (x + mw + 4 > ww) x = ww - mw - 4;
-  if (y + mh + 4 > wh) y = wh - mh - 4;
-
-  contextMenu.value = { x, y, track };
-  showContextAddMenu.value = false;
-}
-
-function closeContextMenu() {
-  contextMenu.value = null;
-  showContextAddMenu.value = false;
-}
-
-function playContextTrack() {
-  if (contextMenu.value) {
-    const ids = tracks.value.map((t: any) => t.id);
-    playback.playTracks(ids, contextMenu.value.track.id);
+function startResize(handle: string, event: MouseEvent) {
+  resizingHandle.value = handle;
+  startX = event.clientX;
+  if (handle === "index-title") {
+    initialWidth = view.columnWidths.index;
+  } else if (handle === "title-artist") {
+    initialWidth = view.columnWidths.artist;
+  } else if (handle === "artist-album") {
+    initialWidth = view.columnWidths.album;
+  } else if (handle === "album-duration") {
+    initialWidth = view.columnWidths.duration;
   }
-  closeContextMenu();
-}
 
-async function playNextContextTrack() {
-  if (contextMenu.value) {
-    await playback.playNextTrack(contextMenu.value.track.id);
-    await playback.fetchQueueState();
-  }
-  closeContextMenu();
-}
-
-function toggleAddFromContext(_event: MouseEvent) {
-  showContextAddMenu.value = !showContextAddMenu.value;
-}
-
-async function addContextTrackToPlaylist(playlistId: number) {
-  if (contextMenu.value) {
-    try {
-      await plStore.addTracks(playlistId, [contextMenu.value.track.id]);
-    } catch (e) {
-      console.error("caw: add to playlist failed", e);
+  const onMouseMove = (e: MouseEvent) => {
+    const delta = e.clientX - startX;
+    if (handle === "index-title") {
+      view.columnWidths.index = Math.max(32, Math.min(80, initialWidth + delta));
+    } else if (handle === "title-artist") {
+      view.columnWidths.artist = Math.max(100, Math.min(400, initialWidth - delta));
+    } else if (handle === "artist-album") {
+      view.columnWidths.album = Math.max(100, Math.min(400, initialWidth - delta));
+    } else if (handle === "album-duration") {
+      view.columnWidths.duration = Math.max(60, Math.min(150, initialWidth - delta));
     }
+  };
+
+  const onMouseUp = () => {
+    resizingHandle.value = null;
+    view.saveColumnWidths();
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  };
+
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+}
+
+// ── Locate button ──
+const showLocateButton = ref(false);
+
+function onScroll() {
+  if (!parentRef.value || !playback.currentTrackId) {
+    showLocateButton.value = false;
+    return;
   }
-  closeContextMenu();
+  const currentIndex = view.filteredTracks.findIndex((t) => t.id === playback.currentTrackId);
+  if (currentIndex === -1) {
+    showLocateButton.value = false;
+    return;
+  }
+  const v = virtualizer.value;
+  if (!v) return;
+  const items = v.getVirtualItems();
+  if (items.length === 0) return;
+  const firstVisible = items[0].index;
+  const lastVisible = items[items.length - 1].index;
+  showLocateButton.value = currentIndex < firstVisible || currentIndex > lastVisible;
 }
 
-// Close menus on click outside
-function onClickDocument() {
-  closeContextMenu();
-}
-
-function onKeyDown(e: KeyboardEvent) {
-  if (e.key === "Escape") closeContextMenu();
+function scrollToCurrentTrack() {
+  if (!playback.currentTrackId) return;
+  const idx = view.filteredTracks.findIndex((t) => t.id === playback.currentTrackId);
+  if (idx !== -1 && virtualizer.value) {
+    virtualizer.value.scrollToIndex(idx, { align: "center", behavior: "smooth" });
+  }
 }
 
 onMounted(() => {
-  document.addEventListener("click", onClickDocument);
-  document.addEventListener("keydown", onKeyDown);
+  window.addEventListener("click", closeContextMenu);
 });
 
 onUnmounted(() => {
-  document.removeEventListener("click", onClickDocument);
-  document.removeEventListener("keydown", onKeyDown);
-  window.removeEventListener("mousemove", onMouseMove);
-  window.removeEventListener("mouseup", onMouseUp);
+  window.removeEventListener("click", closeContextMenu);
 });
-
-// Close menu on list change
-watch(
-  () => tracks.value.length,
-  () => { addMenuTrackId.value = null; }
-);
 </script>

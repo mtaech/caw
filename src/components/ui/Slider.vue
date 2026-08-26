@@ -1,13 +1,15 @@
 <template>
-  <div :class="cn('relative flex items-center w-full h-5 group cursor-pointer', $attrs.class as string)">
+  <div :class="cn('relative flex items-center w-full h-6 group cursor-pointer select-none', $attrs.class as string)">
     <!-- Track background -->
-    <div class="absolute left-0 right-0 h-1 rounded-full bg-border group-hover:h-1.5 transition-all duration-120" />
-    <!-- Filled track -->
+    <div class="absolute left-0 right-0 h-1.5 rounded-full bg-border/80 dark:bg-border group-hover:h-2 transition-all duration-150 overflow-hidden" />
+    
+    <!-- Filled track with vibrant gradient -->
     <div
-      class="absolute left-0 h-1 rounded-full bg-primary group-hover:h-1.5 transition-all duration-120"
-      :style="{ width: `${(modelValue / (max || 1)) * 100}%` }"
+      class="absolute left-0 h-1.5 rounded-full bg-primary group-hover:h-2 transition-all duration-150"
+      :style="{ width: `${progressPercent}%` }"
     />
-    <!-- Thumb -->
+
+    <!-- Range input -->
     <input
       type="range"
       :min="min"
@@ -17,15 +19,18 @@
       class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
       @input="onInput"
     />
+
+    <!-- Modern Thumb Indicator -->
     <div
       v-if="showThumb"
-      class="absolute w-3 h-3 rounded-full bg-foreground shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-120 pointer-events-none"
-      :style="{ left: `calc(${(modelValue / (max || 1)) * 100}% - 6px)` }"
+      class="absolute w-3.5 h-3.5 rounded-full bg-foreground shadow-md ring-2 ring-background opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 pointer-events-none"
+      :style="{ left: `calc(${progressPercent}% - 7px)` }"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { cn } from "@/lib/utils";
 
 export interface SliderProps {
@@ -36,11 +41,18 @@ export interface SliderProps {
   showThumb?: boolean;
 }
 
-withDefaults(defineProps<SliderProps>(), {
+const props = withDefaults(defineProps<SliderProps>(), {
   min: 0,
   max: 1,
   step: 0.01,
   showThumb: true,
+});
+
+const progressPercent = computed(() => {
+  const range = (props.max || 1) - props.min;
+  if (range <= 0) return 0;
+  const pct = ((props.modelValue - props.min) / range) * 100;
+  return Math.max(0, Math.min(100, pct));
 });
 
 const emit = defineEmits<{

@@ -1,27 +1,23 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
-import PlaylistDialog from "@/components/PlaylistDialog.vue";
 import type { TrackDto } from "@/lib/tauri";
+import { formatDuration } from "@/lib/utils";
 import {
   X,
-  Play,
   GripVertical,
   Clock,
-  ChevronDown,
   ListOrdered,
 } from "lucide-vue-next";
 
 defineProps<{ visible: boolean }>();
-defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: [] }>();
 
 const playback = usePlaybackStore();
 
-const showHistory = ref(true);
-const showSaveDialog = ref(false);
+const activeTab = ref<"upcoming" | "history">("upcoming");
 const dragIdx = ref<number | null>(null);
 
-// Map for O(1) track lookup
 const libraryMap = computed(() => {
   const map = new Map<number, TrackDto>();
   for (const t of playback.library) {
@@ -30,19 +26,16 @@ const libraryMap = computed(() => {
   return map;
 });
 
-// Index of current track in the full queue (-1 if not found or null)
 const queueCurrentIndex = computed(() => {
   if (playback.currentTrackId === null) return -1;
   return playback.queue.indexOf(playback.currentTrackId);
 });
 
-// Currently playing track (null if nothing playing)
 const nowPlaying = computed(() => {
   if (playback.currentTrackId === null) return null;
   return libraryMap.value.get(playback.currentTrackId) ?? null;
 });
 
-// Upcoming tracks (everything after current index in the full queue)
 const upcomingTracks = computed(() => {
   const q = playback.queue;
   const curIdx = queueCurrentIndex.value;
@@ -55,17 +48,11 @@ const upcomingTracks = computed(() => {
     .filter(Boolean) as TrackDto[];
 });
 
-// History tracks (most recent first)
 const historyTracks = computed(() => {
   return playback.history
     .map((id) => libraryMap.value.get(id))
     .filter(Boolean) as TrackDto[];
 });
-
-// Total queue length (for header count)
-const queueCount = computed(() => playback.queue.length);
-
-// ── Drag reorder (maps upcoming-tracks slice index to full-queue index) ──
 
 function sliceIdxToFullIdx(sliceIndex: number): number {
   const ci = queueCurrentIndex.value;
@@ -93,176 +80,139 @@ function onDrop(e: DragEvent, sliceIndex: number) {
 function onDragEnd() {
   dragIdx.value = null;
 }
-
-// ── Save-as-playlist ──
-
-async function onSaveConfirm(name: string) {
-  showSaveDialog.value = false;
-  try {
-    await playback.saveQueueAsPlaylist(name);
-  } catch (e) {
-    console.error("caw: save queue as playlist failed", e);
-  }
-}
 </script>
 
 <template>
-  <Transition name="slide-right">
+  <Transition name="slide">
     <aside
       v-if="visible"
-      class="w-72 flex-shrink-0 bg-elevated border-l border-border flex flex-col h-full overflow-hidden"
+      class="w-80 border-l border-border/80 bg-elevated/95 backdrop-blur-md flex flex-col z-30 select-none shadow-3 relative"
     >
       <!-- Header -->
-      <div
-        class="flex items-center justify-between px-4 py-2 border-b border-border flex-shrink-0 gap-2"
-      >
-        <div class="flex items-center gap-2 min-w-0">
-          <ListOrdered class="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <h2 class="text-body-md text-foreground font-medium truncate">播放队列</h2>
-          <span class="text-caption text-muted-foreground flex-shrink-0">{{ queueCount }}</span>
+      <div class="h-12 px-4 border-b border-border/70 flex items-center justify-between flex-shrink-0">
+        <div class="flex items-center gap-2">
+          <ListOrdered class="w-4 h-4 text-primary" />
+          <h2 class="text-sm font-bold text-foreground">播放队列</h2>
+          <span class="text-caption text-faint-foreground px-1.5 py-0.5 rounded-full bg-elevated-hover">
+            {{ playback.queue.length }}
+          </span>
         </div>
-        <div class="flex items-center gap-1 flex-shrink-0">
-          <button
-            v-if="upcomingTracks.length > 0"
-            class="text-caption text-muted-foreground hover:text-destructive transition-colors px-1"
-            title="清空队列"
-            @click="playback.clearQueue()"
-          >
-            清空
-          </button>
-          <button
-            class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-elevated-hover transition-colors"
-            title="关闭队列面板"
-            @click="$emit('close')"
-          >
-            <X class="w-4 h-4" />
-          </button>
+
+        <button
+          class="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-elevated-hover transition-colors"
+          @click="emit('close')"
+        >
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+
+      <!-- Tabs: Upcoming / History -->
+      <div class="flex p-2 gap-1 border-b border-border/60 bg-background/40">
+        <button
+          class="flex-1 py-1.5 text-xs font-medium rounded-md transition-colors"
+          :class="
+            activeTab === 'upcoming'
+              ? 'bg-elevated text-primary font-semibold shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          "
+          @click="activeTab = 'upcoming'"
+        >
+          即将播放 ({{ upcomingTracks.length }})
+        </button>
+        <button
+          class="flex-1 py-1.5 text-xs font-medium rounded-md transition-colors"
+          :class="
+            activeTab === 'history'
+              ? 'bg-elevated text-primary font-semibold shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          "
+          @click="activeTab = 'history'"
+        >
+          历史记录 ({{ historyTracks.length }})
+        </button>
+      </div>
+
+      <!-- Now Playing Section (if upcoming active) -->
+      <div v-if="activeTab === 'upcoming' && nowPlaying" class="p-3 border-b border-border/60 bg-primary/5">
+        <p class="text-caption text-primary font-bold uppercase tracking-wider mb-2">正在播放</p>
+        <div class="flex items-center gap-2.5">
+          <div class="w-3 flex justify-center">
+            <div class="flex items-center gap-0.5 h-3">
+              <span class="w-0.5 h-2 bg-primary rounded-full eq-bar-1" />
+              <span class="w-0.5 h-3 bg-primary rounded-full eq-bar-2" />
+              <span class="w-0.5 h-1.5 bg-primary rounded-full eq-bar-3" />
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-foreground truncate">{{ nowPlaying.title }}</p>
+            <p class="text-caption text-muted-foreground truncate">{{ nowPlaying.artist }}</p>
+          </div>
+          <span class="text-caption text-muted-foreground font-mono">
+            {{ formatDuration(nowPlaying.duration_secs) }}
+          </span>
         </div>
       </div>
 
-      <!-- Queue content -->
-      <div class="flex-1 overflow-y-auto">
-        <!-- Currently playing -->
-        <div v-if="nowPlaying" class="px-3 py-2 border-b border-border/40">
-          <p class="text-caption text-muted-foreground mb-1.5 font-medium">正在播放</p>
-          <div class="flex items-center gap-2 p-2 rounded-lg bg-primary/10">
-            <Play class="w-3 h-3 text-primary fill-primary flex-shrink-0" />
-            <div class="min-w-0">
-              <p class="text-body-sm text-foreground truncate">{{ nowPlaying.title }}</p>
-              <p class="text-caption text-muted-foreground truncate">{{ nowPlaying.artist }}</p>
-            </div>
+      <!-- Queue list items -->
+      <div class="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <template v-if="activeTab === 'upcoming'">
+          <div v-if="upcomingTracks.length === 0" class="py-12 text-center text-xs text-muted-foreground">
+            暂无后续播放曲目
           </div>
-        </div>
-
-        <!-- Upcoming section header -->
-        <div
-          v-if="upcomingTracks.length > 0"
-          class="flex items-center justify-between px-3 pt-2 pb-1"
-        >
-          <p class="text-caption text-muted-foreground font-medium">接下来播放</p>
-        </div>
-
-        <!-- Upcoming tracks (draggable) -->
-        <div v-if="upcomingTracks.length > 0" class="px-1">
           <div
             v-for="(track, idx) in upcomingTracks"
             :key="track.id"
-            class="group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-elevated-hover transition-colors"
-            :class="{ 'opacity-30': dragIdx === sliceIdxToFullIdx(idx) }"
             draggable="true"
+            class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-elevated-hover transition-colors group"
+            @dblclick="playback.playTracks(playback.queue, track.id)"
             @dragstart="onDragStart($event, idx)"
             @dragover.prevent
             @drop="onDrop($event, idx)"
             @dragend="onDragEnd"
           >
-            <GripVertical
-              class="w-3 h-3 text-faint-foreground flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
-            />
-            <div class="min-w-0 flex-1">
-              <p class="text-body-sm text-foreground truncate">{{ track.title }}</p>
+            <GripVertical class="w-3.5 h-3.5 text-faint-foreground opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0" />
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-foreground truncate">{{ track.title }}</p>
               <p class="text-caption text-muted-foreground truncate">{{ track.artist }}</p>
             </div>
-            <button
-              class="p-0.5 rounded opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all flex-shrink-0"
-              @click.stop="playback.removeFromQueue(sliceIdxToFullIdx(idx))"
-              title="从队列移除"
-            >
-              <X class="w-3 h-3" />
-            </button>
+            <span class="text-caption text-muted-foreground font-mono flex-shrink-0">
+              {{ formatDuration(track.duration_secs) }}
+            </span>
           </div>
-        </div>
+        </template>
 
-        <!-- Empty upcoming state -->
-        <div
-          v-else-if="!nowPlaying"
-          class="flex items-center justify-center py-8"
-        >
-          <p class="text-body-sm text-muted-foreground">队列为空</p>
-        </div>
-
-        <!-- History section -->
-        <div v-if="historyTracks.length > 0" class="border-t border-border mt-2">
-          <button
-            class="flex items-center justify-between w-full px-3 py-2 text-caption text-muted-foreground font-medium hover:text-foreground transition-colors"
-            @click="showHistory = !showHistory"
+        <template v-else>
+          <div v-if="historyTracks.length === 0" class="py-12 text-center text-xs text-muted-foreground">
+            暂无播放历史
+          </div>
+          <div
+            v-for="track in historyTracks"
+            :key="track.id"
+            class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-elevated-hover transition-colors"
+            @dblclick="playback.playTracks([track.id], track.id)"
           >
-            <span>播放历史 ({{ historyTracks.length }})</span>
-            <ChevronDown
-              class="w-3.5 h-3.5 transition-transform duration-200"
-              :class="{ 'rotate-180': !showHistory }"
-            />
-          </button>
-          <div v-if="showHistory" class="px-1 pb-2">
-            <div
-              v-for="(track, idx) in historyTracks"
-              :key="track.id + '-hist-' + idx"
-              class="flex items-center gap-2 px-2 py-1.5 rounded-md"
-            >
-              <Clock class="w-3 h-3 text-faint-foreground flex-shrink-0" />
-              <div class="min-w-0 flex-1">
-                <p class="text-body-sm text-foreground truncate">{{ track.title }}</p>
-                <p class="text-caption text-muted-foreground truncate">{{ track.artist }}</p>
-              </div>
+            <Clock class="w-3 h-3 text-faint-foreground flex-shrink-0" />
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-foreground truncate">{{ track.title }}</p>
+              <p class="text-caption text-muted-foreground truncate">{{ track.artist }}</p>
             </div>
+            <span class="text-caption text-muted-foreground font-mono flex-shrink-0">
+              {{ formatDuration(track.duration_secs) }}
+            </span>
           </div>
-        </div>
-      </div>
-
-      <!-- Bottom: save button -->
-      <div class="px-4 py-3 border-t border-border flex-shrink-0">
-        <button
-          class="w-full px-3 py-1.5 rounded-md text-sm bg-primary text-background hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="upcomingTracks.length === 0"
-          @click="showSaveDialog = true"
-        >
-          保存为播放列表
-        </button>
+        </template>
       </div>
     </aside>
   </Transition>
-
-  <!-- Save-as-playlist dialog -->
-  <PlaylistDialog
-    :open="showSaveDialog"
-    title="保存队列为播放列表"
-    placeholder="播放列表名称"
-    confirm-text="保存"
-    :initial-text="'队列 ' + new Date().toLocaleDateString('zh-CN')"
-    @close="showSaveDialog = false"
-    @confirm="onSaveConfirm"
-  />
 </template>
 
-<style>
-/* ── Slide-in from right transition (global, needed for Vue Transition) ── */
-.slide-right-enter-active,
-.slide-right-leave-active {
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
+<style scoped>
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
 }
-.slide-right-enter-from,
-.slide-right-leave-to {
+.slide-enter-from,
+.slide-leave-to {
   transform: translateX(100%);
   opacity: 0;
 }

@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted } from 'vue'
 import { usePlaybackStore } from '@/stores/playback'
+import { useViewStore } from '@/stores/view'
 
 export function useKeyboardShortcuts() {
   const store = usePlaybackStore()
@@ -45,6 +46,13 @@ export function useKeyboardShortcuts() {
       case 'ArrowDown':
         e.preventDefault()
         store.setVolume(Math.max(0, store.volume - 0.05))
+        break
+      case 'KeyL':
+        if (ctrl) {
+          e.preventDefault()
+          const view = useViewStore()
+          view.locateTrack()
+        }
         break
     }
   }

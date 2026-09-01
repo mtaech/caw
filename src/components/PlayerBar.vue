@@ -5,8 +5,13 @@
     <!-- Left: Now Playing Metadata (Generous width, no useless locate tooltip) -->
     <div class="flex items-center gap-3.5 w-80 md:w-96 flex-shrink-0 min-w-0">
       <div class="relative flex-shrink-0">
+        <img
+          v-if="playback.remoteNow?.pic_url"
+          :src="playback.remoteNow.pic_url + '?param=104y104'"
+          class="w-[52px] h-[52px] rounded-lg object-cover border border-border/40 flex-shrink-0"
+        />
         <CoverArt
-          v-if="playback.currentTrackId"
+          v-else-if="playback.currentTrackId"
           :track-id="playback.currentTrackId"
           :size="52"
           class="rounded-lg shadow-sm"
@@ -22,20 +27,20 @@
       <div class="min-w-0 flex-1 flex flex-col justify-center gap-0.5 pr-2">
         <MarqueeText
           class="text-sm font-semibold text-foreground"
-          :text="playback.currentTrack?.title ?? '未在播放'"
+          :text="playback.nowPlaying?.title ?? '未在播放'"
           :speed="30"
           :pause-on-hover="true"
         />
         <p
           class="text-xs text-muted-foreground truncate"
           :title="
-            playback.currentTrack
-              ? playback.currentTrack.artist + (playback.currentTrack.album ? ' · ' + playback.currentTrack.album : '')
+            playback.nowPlaying
+              ? playback.nowPlaying.artist + (playback.nowPlaying.album ? ' · ' + playback.nowPlaying.album : '')
               : 'Caw 音乐播放器'
           "
         >
-          <span v-if="playback.currentTrack">
-            {{ playback.currentTrack.artist }}{{ playback.currentTrack.album ? ' · ' + playback.currentTrack.album : '' }}
+          <span v-if="playback.nowPlaying">
+            {{ playback.nowPlaying.artist }}{{ playback.nowPlaying.album ? ' · ' + playback.nowPlaying.album : '' }}
           </span>
           <span v-else>Caw 音乐播放器</span>
         </p>

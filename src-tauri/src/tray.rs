@@ -75,11 +75,16 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = window.hide();
                     } else {
                         let _ = window.show();
+                        let _ = window.unminimize();
                         let _ = window.set_focus();
                     }
                 }
             }
             "quit" => {
+                let state = app.state::<CawState>();
+                if let Ok(ctrl) = state.ctrl.lock() {
+                    crate::save_playback_config(app, &ctrl);
+                }
                 app.exit(0);
             }
             _ => {}
@@ -97,6 +102,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = window.hide();
                     } else {
                         let _ = window.show();
+                        let _ = window.unminimize();
                         let _ = window.set_focus();
                     }
                 }

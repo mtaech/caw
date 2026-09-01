@@ -82,6 +82,7 @@ const playback = usePlaybackStore();
 const { theme, setTheme } = useTheme();
 
 const isMaximized = inject<Ref<boolean>>("isMaximized", ref(false));
+const requestClose = inject<() => void>("requestClose");
 
 const themeTitle = computed(() => {
   if (theme.value === "light") return "当前：浅色主题（点击切换）";
@@ -115,7 +116,11 @@ async function toggleMaximize() {
 }
 
 async function closeWindow() {
-  await getCurrentWindow().close();
+  if (requestClose) {
+    requestClose();
+  } else {
+    await getCurrentWindow().close();
+  }
 }
 </script>
 

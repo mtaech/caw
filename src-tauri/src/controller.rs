@@ -55,6 +55,8 @@ pub struct PlaybackController {
     pub saved_track_path: Option<String>,
     /// Persisted queue paths for recovery
     pub saved_queue_paths: Vec<String>,
+    /// Currently playing remote (online) track metadata, when any.
+    pub playing_remote: Option<RemoteTrackDto>,
 }
 
 impl PlaybackController {
@@ -76,6 +78,7 @@ impl PlaybackController {
             saved_position: 0.0,
             saved_track_path: None,
             saved_queue_paths: Vec::new(),
+            playing_remote: None,
         };
         ctrl.sync_player_volume();
         ctrl
@@ -495,6 +498,21 @@ impl PlaybackController {
 
     // ── Apply decoded audio ──
 
+    /// Prepare to play a cloud-streamed track. `id` uses the sentinel
+    /// u64::MAX since it is not a library member; the remote metadata is
+    /// surfaced through the `remote_track` event instead.
+    pub fn prepare_play_remote(&mut self, path: PathBuf, meta: RemoteTrackDto) -> DecodeJob {
+        self.playing_remote = Some(meta);
+        self.current_track_id = Some(u64::MAX);
+  self.saved_position = 0.0;
+        self.state = CtrlState::Playing;
+  self.ended_track_handled = false;
+       DecodeJob::Play {
+          path,
+           id: u64::MAX,
+         seek_pos: 0.0,
+        }
+    }
     pub fn apply_decoded(&mut self, decoded: DecodedAudio, id: u64, seek_pos: f64) {
         if let Some(old_id) = self.current_track_id
             && old_id != id
@@ -692,6 +710,19 @@ pub struct PositionPayload {
     pub track_id: Option<u64>,
 }
 
+
+/// Metadata for a track streamed from the cloud that is not in the local
+/// library. Plays through the same decode pipeline as a local file.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct RemoteTrackDto {
+    pub id: String,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub pic_url: Option<String>,
+    pub duration_secs: u64,
+}
+
 #[derive(serde::Serialize, Clone)]
 pub struct TrackDto {
     pub id: u64,
@@ -763,12 +794,31 @@ pub fn execute_decode_job(
             }
         };
 
+
+        const REMOTE_ID: u64 = u64::MAX;
+
         let state_dto = {
             let mut c = ctrl.lock().unwrap();
+            if id == REMOTE_ID {
+                c.current_track_id = Some(REMOTE_ID);
+                c.state = CtrlState::Playing;
+            } else {
+                // Any local track clears a lingering remote session.
+                c.playing_remote = None;
+            }
             c.apply_decoded(decoded, id, seek_pos);
             crate::save_playback_config(handle, &c);
             c.state_dto()
         };
+
+        // Surface remote metadata for frontends that render the now-playing.
+        let remote = ctrl.lock().unwrap().playing_remote.clone();
+        if id == REMOTE_ID {
+            if let Some(meta) = remote {
+                let _ = handle.emit("remote_track", &meta);
+            }
+        }
+
 
         let _ = handle.emit("playback_state", &state_dto);
         let _ = handle.emit(

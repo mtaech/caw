@@ -14,3 +14,8 @@ dist/
 .idea/
 *.swp
 *.swo
+
+# Secrets — NetEase OpenAPI credentials
+.env
+.env.local
+!.env.example

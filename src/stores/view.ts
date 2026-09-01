@@ -7,7 +7,7 @@ import { ref, computed } from "vue";
 import { usePlaybackStore } from "./playback";
 import { usePlaylistStore } from "./playlists";
 
-export type NavItem = "all-music" | "artists" | "albums" | "playlists" | "folders" | "settings";
+export type NavItem = "all-music" | "artists" | "albums" | "playlists" | "folders" | "settings" | "netease";
 export type SortKey = "track_number" | "title" | "artist" | "album" | "duration";
 export type DetailTarget =
   | { type: "album"; name: string }

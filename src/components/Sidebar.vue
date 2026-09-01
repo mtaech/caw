@@ -141,15 +141,18 @@ import {
   Folder,
   Plus,
   Settings,
+  Cloud,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-vue-next";
 import { useViewStore } from "@/stores/view";
 import { usePlaylistStore } from "@/stores/playlists";
+import { useNeteaseStore } from "@/stores/netease";
 import PlaylistDialog from "@/components/PlaylistDialog.vue";
 
 const view = useViewStore();
 const plStore = usePlaylistStore();
+const netease = useNeteaseStore();
 
 const collapsed = ref(false);
 const showCreateDialog = ref(false);
@@ -158,13 +161,19 @@ const isPlaylistOpen = computed(
   () => view.nav === "playlists" && plStore.currentPlaylistId !== null,
 );
 
-const navItems = [
-  { id: "all-music", label: "全部音乐", icon: Music },
-  { id: "artists", label: "艺术家", icon: Users },
-  { id: "albums", label: "专辑", icon: Album },
-  { id: "folders", label: "文件夹", icon: Folder },
-  { id: "settings", label: "设置", icon: Settings },
-];
+const navItems = computed(() => {
+  const items = [
+    { id: "all-music", label: "全部音乐", icon: Music },
+    { id: "artists", label: "艺术家", icon: Users },
+    { id: "albums", label: "专辑", icon: Album },
+    { id: "folders", label: "文件夹", icon: Folder },
+  ];
+  if (netease.enabled) {
+    items.push({ id: "netease", label: "网易云音乐", icon: Cloud });
+  }
+  items.push({ id: "settings", label: "设置", icon: Settings });
+  return items;
+});
 
 function onNav(id: string) {
   if (id === "playlists") {

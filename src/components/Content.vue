@@ -1,8 +1,8 @@
 <template>
   <main class="flex-1 flex flex-col overflow-hidden bg-background relative">
-    <!-- Search bar (only in data-browsing views, NOT in settings/placeholders) -->
+    <!-- Search bar (only in data-browsing views, NOT in settings/placeholders/netease) -->
     <div
-      v-if="!view.detail && !showPlaylistDetail && view.nav !== 'settings' && view.nav !== 'folders' && view.nav !== 'playlists'"
+      v-if="!view.detail && !showPlaylistDetail && view.nav !== 'settings' && view.nav !== 'folders' && view.nav !== 'playlists' && view.nav !== 'netease'"
       class="flex items-center gap-3 px-5 py-2.5 border-b border-border flex-shrink-0 bg-background/50 backdrop-blur-sm z-10"
     >
       <div class="flex-1 max-w-md flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-elevated border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-150">
@@ -52,6 +52,7 @@
         :currentPath="currentFolderPath"
         @navigate="currentFolderPath = $event"
       />
+      <NeteaseView v-else-if="view.nav === 'netease'" />
       <Settings v-else-if="view.nav === 'settings'" />
       <div v-else class="flex-1 flex items-center justify-center">
         <p class="text-muted-foreground">请选择一个视图</p>
@@ -74,6 +75,7 @@ import PlaylistDetail from "@/components/PlaylistDetail.vue";
 import Placeholder from "@/components/Placeholder.vue";
 import Settings from "@/components/Settings.vue";
 import FolderView from "@/components/FolderView.vue";
+import NeteaseView from "@/components/netease/NeteaseView.vue";
 
 const view = useViewStore();
 const plStore = usePlaylistStore();

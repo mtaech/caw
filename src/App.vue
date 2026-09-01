@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, provide, ref } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
+import { useNeteaseStore } from "@/stores/netease";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { applyFont, getFontPreference, loadSystemFonts } from "@/lib/fonts";
 import { useTheme } from "@/composables/useTheme";
@@ -11,29 +12,54 @@ import Sidebar from "@/components/Sidebar.vue";
 import Content from "@/components/Content.vue";
 import PlayerBar from "@/components/PlayerBar.vue";
 import QueuePanel from "@/components/QueuePanel.vue";
+import CloseDialog from "@/components/CloseDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import { Disc3, FolderOpen } from "lucide-vue-next";
+import * as api from "@/lib/tauri";
 
 useKeyboardShortcuts();
 
 const { initTheme } = useTheme();
 const playback = usePlaybackStore();
+const netease = useNeteaseStore();
 const showQueue = ref(false);
 const isMaximized = ref(false);
+const showCloseDialog = ref(false);
+
+async function handleRequestClose() {
+  try {
+    const prompt = await api.getClosePrompt();
+    if (prompt) {
+      showCloseDialog.value = true;
+    } else {
+      const toTray = await api.getMinimizeToTray();
+      if (toTray) {
+        await api.hideWindow();
+      } else {
+        await api.exitApp();
+      }
+    }
+  } catch (err) {
+    console.error("Failed to handle close request:", err);
+    showCloseDialog.value = true;
+  }
+}
 
 provide("toggleQueue", () => {
   showQueue.value = !showQueue.value;
 });
 provide("showQueue", showQueue);
 provide("isMaximized", isMaximized);
+provide("requestClose", handleRequestClose);
 
 let unlistenResize: (() => void) | null = null;
+let unlistenCloseRequested: (() => void) | null = null;
 
 onMounted(async () => {
   initTheme();
   await loadSystemFonts();
   applyFont(getFontPreference());
-  await playback.init();
+  await Promise.all([playback.init(), netease.loadConfig()]);
 
   try {
     const w = getCurrentWindow();
@@ -42,11 +68,18 @@ onMounted(async () => {
       isMaximized.value = await w.isMaximized();
     });
   } catch {}
+
+  try {
+    unlistenCloseRequested = await api.onWindowCloseRequested(() => {
+      showCloseDialog.value = true;
+    });
+  } catch {}
 });
 
 onUnmounted(() => {
   playback.cleanup();
   unlistenResize?.();
+  unlistenCloseRequested?.();
 });
 
 async function handlePickFolder() {
@@ -129,5 +162,12 @@ function startResize(dir: string) {
       </div>
       <PlayerBar />
     </template>
+
+    <!-- Close confirmation dialog -->
+    <CloseDialog
+      :open="showCloseDialog"
+      @close="showCloseDialog = false"
+      @confirm="showCloseDialog = false"
+    />
   </div>
 </template>

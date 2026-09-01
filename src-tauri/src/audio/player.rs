@@ -281,15 +281,15 @@ impl Player {
                     .unwrap_or_else(|_| "<unknown>".into());
                 let mut score = match id.as_str() {
                     n if n.ends_with(":null") || n.contains(":null:") => return None,
+                    // Direct hw/open bypasses PipeWire and holds the ALSA device
+                    // exclusively -> the sink never appears in the sound server and
+                    // other apps get "device busy". Never fall back onto these.
+                    n if n.contains("plughw:") || n.contains("front:")
+                        || n.contains("hw:") || n.contains("dmix") => return None,
                     n if n.contains("pipewire") => 0,
                     n if n.contains("pulse") => 1,
                     n if n.ends_with(":default") => 2,
                     n if n.contains("sysdefault") => 3,
-                    n if n.contains("plughw:") => 4,
-                    n if n.contains("front:") => 5,
-                    n if n.contains("hw:") => 6,
-                    // dmix is what fails in the broken-default case; try it last.
-                    n if n.contains("dmix") => 9,
                     _ => 7,
                 };
                 // Strongly prefer the card backing the default sink, so we do not

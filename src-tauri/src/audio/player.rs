@@ -279,22 +279,36 @@ impl Player {
                     .id()
                     .map(|i| i.to_string())
                     .unwrap_or_else(|_| "<unknown>".into());
+                // Sound-server routes always rank first: they hand audio to
+                // PipeWire/Pulse, which owns the hardware and shares it, so
+                // the device stays visible to every other app. Direct-hardware
+                // PCMs (sysdefault:/plughw:/front:/hw:/dmix:) open the ALSA
+                // device themselves and hold it exclusively — the sound server
+                // then fails with "device busy" and the device disappears from
+                // the system mixer (seen with sysdefault:CARD=TypeC grabbing
+                // /dev/snd/pcmC3D0p). They remain last-resort fallbacks for
+                // systems without the pipewire-alsa/pulse bridge, ranked among
+                // themselves only.
                 let mut score = match id.as_str() {
                     n if n.ends_with(":null") || n.contains(":null:") => return None,
-                    // Direct hw/open bypasses PipeWire and holds the ALSA device
-                    // exclusively -> the sink never appears in the sound server and
-                    // other apps get "device busy". Never fall back onto these.
-                    n if n.contains("plughw:") || n.contains("front:")
-                        || n.contains("hw:") || n.contains("dmix") => return None,
                     n if n.contains("pipewire") => 0,
                     n if n.contains("pulse") => 1,
                     n if n.ends_with(":default") => 2,
-                    n if n.contains("sysdefault") => 3,
-                    _ => 7,
+                    // Hardware tier: values must stay above the bridge tier
+                    // (with the -20 bonus below, min 80) so nothing here can
+                    // ever outrank the sound-server routes.
+                    n if n.contains("sysdefault") => 100,
+                    n if n.contains("plughw:") => 101,
+                    n if n.contains("front:") => 102,
+                    n if n.contains("hw:") => 103,
+                    n if n.contains("dmix") => 109,
+                    _ => 107,
                 };
-                // Strongly prefer the card backing the default sink, so we do not
-                // fall back onto some unrelated (often silent) HDMI or onboard card.
-                if let Some(ref card) = preferred_card
+                // Prefer the card backing the default sink, but only to order
+                // the hardware fallback tier — the sound-server routes above
+                // already follow the user's chosen sink by construction.
+                if let Some(card) = &preferred_card
+                    && score >= 100
                     && id.contains(&format!("CARD={}", card))
                 {
                     score -= 20;

@@ -28,10 +28,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   const currentTrack = computed(() =>
     library.value.find((t) => t.id === currentTrackId.value) ?? null,
   );
-
-  // Cloud-streamed (NetEase online) track, not in the local library.
-  const remoteNow = ref<api.RemoteTrackDto | null>(null);
-  const nowPlaying = computed(() => remoteNow.value ?? currentTrack.value);
+  const nowPlaying = computed(() => currentTrack.value);
 
   // ── Cover cache ──
 
@@ -86,14 +83,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     unlistens.push(
       await api.onTrackChanged((p) => {
         currentTrackId.value = p.track_id;
-        // A local track supersedes any cloud track.
-        if (remoteNow.value && p.track_id !== null) remoteNow.value = null;
-      }),
-    );
-
-    unlistens.push(
-      await api.onRemoteTrack((t) => {
-        remoteNow.value = t;
       }),
     );
 
@@ -255,7 +244,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     queue,
     loading,
     currentTrack,
-    remoteNow,
     nowPlaying,
     getCoverUrl,
     init,

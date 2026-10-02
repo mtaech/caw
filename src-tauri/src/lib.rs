@@ -10,7 +10,6 @@ mod platform;
 mod tray;
 pub mod paths;
 pub mod logger;
-pub mod netease;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -33,7 +32,6 @@ pub struct CawState {
     pub minimize_to_tray: Mutex<bool>,
     pub close_prompt: Mutex<bool>,
     pub queue_replace_mode: Mutex<bool>,
-    pub netease_client: netease::NeteaseClient,
 }
 
 // ── Commands ───────────────────────────────────────────────────────
@@ -813,249 +811,6 @@ fn get_system_fonts() -> Result<Vec<String>, String> {
     }
 }
 
-// ── NetEase Cloud Music Commands ───────────────────────────────────
-
-fn netease_config_dto(state: &CawState) -> netease::NeteaseConfigDto {
- let cfg = state.netease_client.get_config();
-    netease::NeteaseConfigDto {
-   enabled: cfg.enabled,
-        app_id: cfg.app_id,
-        has_private_key: !cfg.private_key.trim().is_empty(),
-   anonymous_mode: cfg.anonymous_mode,
-   api_host: cfg.api_host,
-        device_complete: cfg.device.is_complete(),
-        logged_in: state.netease_client.is_logged_in(),
-        user_name: state.netease_client.cached_user().map(|u| u.nickname),
-    }
-}
-
-#[tauri::command]
-fn get_netease_config(state: tauri::State<CawState>) -> netease::NeteaseConfigDto {
-    netease_config_dto(&state)
-}
-
-#[tauri::command]
-async fn set_netease_config(
-    app: AppHandle,
-    state: tauri::State<'_, CawState>,
-    config: netease::UpdateNeteaseConfigDto,
-) -> Result<netease::NeteaseConfigDto, String> {
-    let mut current = state.netease_client.get_config();
-    current.enabled = config.enabled;
-    if let Some(app_id) = config.app_id {
-     current.app_id = app_id;
-    }
-    if let Some(pk) = config.private_key {
-        current.private_key = pk;
-    }
-    if let Some(anon) = config.anonymous_mode {
-        current.anonymous_mode = anon;
-    }
-
-    state.netease_client.update_config(current.clone());
-    netease::save_netease_config(&app, &current);
-
-  Ok(netease_config_dto(&state))
-}
-
-#[tauri::command]
-async fn test_netease_connection(
-    state: tauri::State<'_, CawState>,
-) -> Result<netease::NeteaseConnectionStatus, String> {
-    Ok(state.netease_client.test_connection().await)
-}
-
-// ── Auth ───────────────────────────────────────────────────────────
-
-#[tauri::command]
-async fn netease_start_qr_login(
-    state: tauri::State<'_, CawState>,
-) -> Result<netease::NeteaseQrSessionDto, String> {
-    state.netease_client.start_qr_login().await
-}
-
-/// Poll a QR session once. Persists tokens as soon as login is confirmed so
-/// the session survives a restart.
-#[tauri::command]
-async fn netease_poll_qr_login(
-    app: AppHandle,
-    state: tauri::State<'_, CawState>,
-    uni_key: String,
-) -> Result<netease::NeteaseQrPollDto, String> {
-    let res = state.netease_client.poll_qr_login(&uni_key).await?;
-    if res.status == "confirmed" {
-        netease::save_netease_tokens(&app, &state.netease_client.get_tokens());
-        crate::log_info!("caw: netease QR login confirmed");
-    }
-    Ok(res)
-}
-
-#[tauri::command]
-async fn netease_logout(
-    app: AppHandle,
-    state: tauri::State<'_, CawState>,
-) -> Result<(), String> {
-    state.netease_client.logout();
-    netease::save_netease_tokens(&app, &netease::NeteaseTokens::default());
-    Ok(())
-}
-
-#[tauri::command]
-async fn netease_current_user(
-    state: tauri::State<'_, CawState>,
-) -> Result<Option<netease::NeteaseUserDto>, String> {
-    if !state.netease_client.is_logged_in() {
-        return Ok(None);
-    }
-    if let Some(user) = state.netease_client.cached_user() {
-        return Ok(Some(user));
-    }
-    Ok(state.netease_client.fetch_user_profile().await.ok())
-}
-
-// ── Content ────────────────────────────────────────────────────────
-
-#[tauri::command]
-async fn netease_recommend_daily(
-    state: tauri::State<'_, CawState>,
-    limit: Option<u32>,
-) -> Result<Vec<netease::NeteaseSongDto>, String> {
-    state
-        .netease_client
-        .recommend_daily(limit.unwrap_or(30))
-        .await
-}
-
-#[tauri::command]
-async fn netease_heartbeat(
-    state: tauri::State<'_, CawState>,
-    playlist_id: String,
-  song_id: String,
-    count: Option<u32>,
-) -> Result<Vec<netease::NeteaseSongDto>, String> {
-    state
-        .netease_client
- .heartbeat(&playlist_id, &song_id, count.unwrap_or(20))
-        .await
-}
-
-#[tauri::command]
-async fn netease_play_history(
-    state: tauri::State<'_, CawState>,
-    limit: Option<u32>,
-) -> Result<Vec<netease::NeteaseSongDto>, String> {
-    state.netease_client.play_history(limit.unwrap_or(30)).await
-}
-
-#[tauri::command]
-async fn netease_my_playlists(
-    state: tauri::State<'_, CawState>,
-    limit: Option<u32>,
-) -> Result<Vec<netease::NeteasePlaylistDto>, String> {
-    state.netease_client.my_playlists(limit.unwrap_or(50)).await
-}
-
-#[tauri::command]
-async fn netease_playlist_tracks(
-    state: tauri::State<'_, CawState>,
-    playlist_id: String,
-    limit: Option<u32>,
-    offset: Option<u32>,
-) -> Result<Vec<netease::NeteaseSongDto>, String> {
-    state
-        .netease_client
-        .playlist_tracks(&playlist_id, limit.unwrap_or(100), offset.unwrap_or(0))
-        .await
-}
-
-#[tauri::command]
-async fn netease_set_like(
-    state: tauri::State<'_, CawState>,
-  song_id: String,
-    like: bool,
-) -> Result<(), String> {
-    state.netease_client.set_like(&song_id, like).await
-}
-
-#[tauri::command]
-async fn netease_search_songs(
-state: tauri::State<'_, CawState>,
-    query: String,
-    page: Option<u32>,
-    limit: Option<u32>,
-) -> Result<netease::NeteaseSearchResultDto, String> {
-    state
-  .netease_client
-      .search_songs(&query, page.unwrap_or(1), limit.unwrap_or(30))
-        .await
-}
-
-#[tauri::command]
-async fn netease_get_song_url(
-    state: tauri::State<'_, CawState>,
-    song_id: String,
-) -> Result<Option<netease::NeteasePlayUrlDto>, String> {
-    state.netease_client.get_song_url(&song_id).await
-}
-
-#[tauri::command]
-async fn netease_get_lyric(
- state: tauri::State<'_, CawState>,
-    song_id: String,
-) -> Result<netease::NeteaseLyricDto, String> {
-    state.netease_client.get_lyric(&song_id).await
-}
-
-/// Resolve a streamable URL for a NetEase song, download it to a temp file,
-/// and play it through the local (file-based) pipeline. The remote track's
-/// metadata is emitted as the `remote_track` event so the player bar can
-/// show it even though it is not in the local library.
-#[tauri::command]
-async fn netease_play_online(
-    app: AppHandle,
-    state: tauri::State<'_, CawState>,
-    song: netease::NeteaseSongDto,
-) -> Result<(), String> {
-    let url_info = state.netease_client.get_song_url(&song.id).await?;
-    let Some(url_info) = url_info else {
-        return Err("该歌曲暂无可播放的音频流（可能是版权或 VIP 限制）".to_string());
-    };
-    if url_info.url.trim().is_empty() {
-        return Err("该歌曲暂无可播放的音频流（可能是版权或 VIP 限制）".to_string());
-    }
-
-    // Temp file for the downloaded stream.
-    let ext = match url_info.format.as_str() {
-        "flac" => "flac",
-        "m4a" => "m4a",
-        "aac" => "aac",
-        _ => "mp3",
-    };
-    let mut dest = std::env::temp_dir();
-    dest.push(format!("caw-online-{}.{}", song.id, ext));
-    state
-        .netease_client
-        .download_to_file(&url_info.url, &dest)
-        .await?;
-
-    let meta = crate::controller::RemoteTrackDto {
-        id: song.id,
-        title: song.title,
-        artist: song.artist,
-        album: song.album,
-        pic_url: song.pic_url,
-        duration_secs: song.duration_secs,
-    };
-
-    let job = state
-        .ctrl
-        .lock()
-        .unwrap()
-        .prepare_play_remote(dest, meta);
-    crate::controller::execute_decode_job(job, &state.ctrl, &app);
-    Ok(())
-}
-
 // ── App Entry ──────────────────────────────────────────────────────
 
 pub fn run() {
@@ -1070,7 +825,6 @@ pub fn run() {
             minimize_to_tray: Mutex::new(true),
             close_prompt: Mutex::new(true),
             queue_replace_mode: Mutex::new(true), // default: replace mode on
-            netease_client: netease::NeteaseClient::new(netease::NeteaseConfig::default()),
         })
         .setup(|app| {
             crate::log_info!("caw: starting up — directory unified at {:?}", crate::paths::caw_dir());
@@ -1193,24 +947,6 @@ pub fn run() {
                     {
                         *app.state::<CawState>().close_prompt.lock().unwrap() = b;
                     }
-                }
-            }
-
-            {
-                netease::load_dotenv();
-                let netease_cfg = netease::load_netease_config(&app.handle());
-                let netease_enabled = netease_cfg.enabled;
-                let device_ok = netease_cfg.device.is_complete();
-                app.state::<CawState>().netease_client.update_config(netease_cfg);
-
-                // Restore a previous QR login so the user isn't asked to scan again.
-                let tokens = netease::load_netease_tokens(&app.handle());
-                if tokens.is_valid() {
-                    app.state::<CawState>().netease_client.set_tokens(tokens);
-                    crate::log_info!("caw: netease session restored");
-                }
-                if netease_enabled && !device_ok {
-                    crate::log_info!("caw: netease enabled but device os/channel/brand missing - requests will fail with code 400");
                 }
             }
 
@@ -1391,23 +1127,6 @@ pub fn run() {
             remove_from_playlist,
             reorder_playlist,
             get_system_fonts,
-            get_netease_config,
-            set_netease_config,
-            test_netease_connection,
-         netease_start_qr_login,
-         netease_poll_qr_login,
-         netease_logout,
-         netease_current_user,
-         netease_recommend_daily,
-         netease_heartbeat,
-         netease_play_history,
-         netease_my_playlists,
-         netease_playlist_tracks,
-         netease_set_like,
-            netease_search_songs,
-            netease_get_song_url,
-            netease_get_lyric,
-            netease_play_online,
         ])
         .run(tauri::generate_context!())
         .expect("error while running caw application");

@@ -14,22 +14,9 @@
 - 📻 **持久化播放列表** — 基于本地 SQLite 数据库安全存储
 - 🔍 **搜索与过滤** — 毫秒级按标题 / 艺人 / 专辑即时过滤
 - 📊 **多维资料库视图** — 全部音乐 / 艺术家 / 专辑 / 文件夹目录树
-- ☁️ **网易云音乐扩展（可选）** — 支持 OpenAPI 在线曲库检索、音频流试听与动态歌词查看（默认关闭，保持纯本地播放体验）
 - 🔈 **MPRIS 集成** — Linux 系统媒体键、桌面播放小部件及锁屏控制集成
 - 📌 **系统托盘** — 最小化到托盘后台持续播放、关闭前确认提示
 - 🖥️ **跨平台支持** — Linux + Windows
-
-## 网易云音乐扩展（可选）
-
-Caw 默认作为**纯粹的本地音乐播放器**运行，不发起任何额外的在线网络请求。网易云模块接入的是[云音乐开放平台 OpenAPI](docs/netease-openapi.md)，提供在线推荐、搜索与试听：
-
-1. 前往「**偏好设置**」→「**网易云音乐**」开启开关；
-2. 填写[网易云音乐开放平台](https://developer.music.163.com/st/developer/apply/account?type=INDIVIDUAL)分配的 `App ID` 与 `Private Key`（RSA 私钥）；
-3. 关键：在项目根目录 `.env` 里配置 `CAW_NETEASE_OS` / `CAW_NETEASE_CHANNEL` / `CAW_NETEASE_BRAND` —— **这三个值必须与你的 appId 在开放平台的注册信息一致**，否则所有请求都会返回 `code 400 公共参数校验失败`。它们无法自行编造，需向平台对接人索取；
-4. 点击「**测试连接**」验证凭证；随后点击侧边栏「网易云音乐」→「推荐」标签的「立即登录」，用手机网易云 App 扫码登录；
-5. 登录后即可查看**每日推荐、最近播放、我的歌单**，并在线搜索、试听（单曲可播放）。
-
-> 凭证与登录 token 仅保存在本地配置文件中，绝不上传至任何第三方服务器。关闭该选项后，所有在线入口与请求将完全停用。
 
 ## 技术栈
 
@@ -41,7 +28,6 @@ Caw 默认作为**纯粹的本地音乐播放器**运行，不发起任何额外
 | **前端架构** | Vue 3 + TypeScript + Pinia | 响应式状态流与组合式 API |
 | **样式与组件** | Tailwind CSS + [Radix Vue](https://www.radix-vue.com/) + [Lucide](https://lucide.dev/) | 现代化暗色设计系统 |
 | **本地存储** | SQLite ([rusqlite](https://github.com/rusqlite/rusqlite)) + Tauri Store | 播放列表与偏好配置持久化 |
-| **网络请求** | [reqwest](https://github.com/seanmonstar/reqwest) | 异步 HTTPS 通信（网易云 OpenAPI 客户端） |
 | **系统集成** | [zbus](https://github.com/dbus2/zbus) (MPRIS) | Linux D-Bus 媒体总线集成 |
 
 ## 开发

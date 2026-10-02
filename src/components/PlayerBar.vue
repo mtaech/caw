@@ -5,13 +5,8 @@
     <!-- Left: Now Playing Metadata (Generous width, no useless locate tooltip) -->
     <div class="flex items-center gap-3.5 w-80 md:w-96 flex-shrink-0 min-w-0">
       <div class="relative flex-shrink-0">
-        <img
-          v-if="playback.remoteNow?.pic_url"
-          :src="playback.remoteNow.pic_url + '?param=104y104'"
-          class="w-[52px] h-[52px] rounded-lg object-cover border border-border/40 flex-shrink-0"
-        />
         <CoverArt
-          v-else-if="playback.currentTrackId"
+          v-if="playback.currentTrackId"
           :track-id="playback.currentTrackId"
           :size="52"
           class="rounded-lg shadow-sm"

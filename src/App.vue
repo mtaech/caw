@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, provide, ref } from "vue";
 import { usePlaybackStore } from "@/stores/playback";
-import { useNeteaseStore } from "@/stores/netease";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { applyFont, getFontPreference, loadSystemFonts } from "@/lib/fonts";
 import { useTheme } from "@/composables/useTheme";
@@ -21,7 +20,6 @@ useKeyboardShortcuts();
 
 const { initTheme } = useTheme();
 const playback = usePlaybackStore();
-const netease = useNeteaseStore();
 const showQueue = ref(false);
 const isMaximized = ref(false);
 const showCloseDialog = ref(false);
@@ -59,7 +57,7 @@ onMounted(async () => {
   initTheme();
   await loadSystemFonts();
   applyFont(getFontPreference());
-  await Promise.all([playback.init(), netease.loadConfig()]);
+  await playback.init();
 
   try {
     const w = getCurrentWindow();

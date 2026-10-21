@@ -59,6 +59,8 @@ impl Render for PlayerApp {
                                 );
                                 if close_to_tray {
                                     close_entity.update(cx, |app, cx| app.flush_config(cx));
+                                    // Remove the taskbar entry too, not just minimize.
+                                    crate::platform::kwin::set_taskbar_visible(false);
                                     window.minimize_window();
                                 } else {
                                     crate::ui::dialogs::open_close_confirm(

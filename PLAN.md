@@ -425,3 +425,18 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 验证：用 KWin 脚本 `w.closeWindow()` 触发真实平台关闭——
   `close_to_tray=true` 时日志 `window close requested (close_to_tray=true)` 且进程存活（最小化）；
   `false` 时弹出“退出 Caw？”确认框且进程存活。
+
+### 最小化到托盘时移除任务栏条目（2026-10-21）
+
+- 问题：Wayland 没有“从任务栏移除窗口”的标准协议；GPUI 也没有 hide/unmap API，
+  仅 `minimize_window()` 会保留任务栏条目。
+- 方案（KDE/Plasma）：`src/platform/kwin.rs` 通过 KWin 的脚本 D-Bus 接口
+  （`org.kde.kwin.Scripting.loadScript/start/unloadScript`）在独立线程里执行一段 JS，
+  对 `pid == 当前进程` 的窗口设置 `skipTaskbar` / `skipPager`；恢复时再置回并
+  `minimized = false` + `workspace.activeWindow = w`。
+- 关闭到托盘路径（titlebar 与 `on_window_should_close`）调用 `set_taskbar_visible(false)`；
+  托盘“显示 Caw”/MPRIS Raise 调 `set_taskbar_visible(true)` 并 activate。
+- 非 KDE 桌面：该函数直接返回（GNOME 等 Wayland 合成器没有等价机制），退化为最小化；
+  这是平台限制，已在 README 说明。
+- 验证：KWin 查询脚本确认 `skipTaskbar=true/minimized=true`，任务栏截图中 Caw 图标消失；
+  恢复后 `skipTaskbar=false/minimized=false` 且窗口重新出现在任务栏并激活。

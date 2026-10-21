@@ -34,6 +34,8 @@ use crate::app::PlayerApp;
 use crate::models::playlist::{PlaybackMode, PlaybackState};
 
 #[cfg(target_os = "linux")]
+pub mod kwin;
+#[cfg(target_os = "linux")]
 pub mod mpris;
 #[cfg(target_os = "linux")]
 pub mod tray;

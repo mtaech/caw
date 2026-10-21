@@ -896,6 +896,12 @@ impl PlayerApp {
     #[allow(dead_code)] // wired by the settings view (P2)
     pub fn set_close_to_tray(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.update_config(|config| config.close_to_tray = enabled);
+        // Persist immediately: closing the window right after toggling must not
+        // read a stale value from disk, and the throttled flush may be skipped.
+        if let Err(err) = self.config.save() {
+            crate::log_error!("failed to save close_to_tray preference: {err}");
+        }
+        crate::log_info!("close_to_tray set to {enabled}");
         cx.notify();
     }
 

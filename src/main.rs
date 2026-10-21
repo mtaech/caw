@@ -55,6 +55,30 @@ fn main() {
                 let focus_handle = view.read(cx).focus_handle.clone();
                 window.focus(&focus_handle, cx);
 
+                // Platform close requests (window-manager X, Alt+F4, session close)
+                // must follow the same preference as the in-app title bar: either
+                // minimize to tray or ask before quitting. Returning false keeps the
+                // window alive; only the confirm dialog's OK actually quits.
+                {
+                    let close_entity = view.clone();
+                    window.on_window_should_close(cx, move |window, cx| {
+                        let close_to_tray = close_entity.read(cx).config.close_to_tray;
+                        crate::log_info!("window close requested (close_to_tray={close_to_tray})");
+                        crate::platform::window_state::save_now(window);
+                        close_entity.update(cx, |app, cx| app.flush_config(cx));
+                        if close_to_tray {
+                            window.minimize_window();
+                        } else {
+                            crate::ui::dialogs::open_close_confirm(
+                                window,
+                                cx,
+                                close_entity.clone(),
+                            );
+                        }
+                        false
+                    });
+                }
+
                 // MPRIS / desktop media integration (Linux). Never fails: without a
                 // session bus it logs a warning and stays inert.
                 let platform = platform::Platform::start();

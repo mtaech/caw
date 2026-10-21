@@ -54,6 +54,9 @@ impl Render for PlayerApp {
                             .on_close_window(move |_, window, cx| {
                                 crate::platform::window_state::save_now(window);
                                 let close_to_tray = close_entity.read(cx).config.close_to_tray;
+                                crate::log_info!(
+                                    "titlebar close requested (close_to_tray={close_to_tray})"
+                                );
                                 if close_to_tray {
                                     close_entity.update(cx, |app, cx| app.flush_config(cx));
                                     window.minimize_window();

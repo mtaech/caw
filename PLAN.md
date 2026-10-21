@@ -410,3 +410,18 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   `rpm -qip/-qlp` 元数据与文件清单正确（/usr/bin/caw、desktop、图标）。
 - `.deb`（12MB）元数据与清单正确；`.AppImage`（17MB）实测可启动（MPRIS/托盘/扫描均正常）；
   `tar.gz` + sha256 正常。
+
+### 修复：选择“最小化到托盘”后点关闭仍然退出（2026-10-21）
+
+- 根因：系统层关闭请求（窗口管理器 X / Alt+F4 / 会话关闭，经 `xdg_toplevel::Close`）
+  不经过 GPUI `TitleBar::on_close_window`，平台默认直接销毁窗口；而之前的关闭偏好只在
+  title bar 回调里判断，所以这条路径直接退出。
+- 修复：`main.rs` 创建窗口后注册 `window.on_window_should_close(...)`（Wayland/X11 后端均实现），
+  回调里读取 `close_to_tray`：
+  - true → 保存窗口几何 + flush 配置 + `minimize_window()`，返回 `false`（阻止关闭）；
+  - false → 打开退出确认对话框，返回 `false`（取消则保留窗口，确认才 `cx.quit()`）。
+- 同时 `set_close_to_tray` 现在立即同步写 `config.json`（不再依赖 750ms 节流），
+  避免“刚选中就关窗口”读到旧值。两条路径都加了 `caw:` 日志。
+- 验证：用 KWin 脚本 `w.closeWindow()` 触发真实平台关闭——
+  `close_to_tray=true` 时日志 `window close requested (close_to_tray=true)` 且进程存活（最小化）；
+  `false` 时弹出“退出 Caw？”确认框且进程存活。

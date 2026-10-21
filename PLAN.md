@@ -440,3 +440,22 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   这是平台限制，已在 README 说明。
 - 验证：KWin 查询脚本确认 `skipTaskbar=true/minimized=true`，任务栏截图中 Caw 图标消失；
   恢复后 `skipTaskbar=false/minimized=false` 且窗口重新出现在任务栏并激活。
+
+### 托盘菜单美化：音乐播放器风格（2026-10-21）
+
+- 菜单结构改为：
+  1. “正在播放”信息行（禁用态）：`歌名 — 歌手  当前/总时长`，图标随播放状态变化；
+  2. 分隔线；
+  3. 播放/暂停（图标 `media-playback-*-symbolic`，文案随状态变化）、上一首、下一首；
+  4. 分隔线；
+  5. “音量  N%”子菜单：0/25/50/75/100% 单选（radio，当前档位勾选），点击即调音量；
+  6. “播放模式 · 顺序播放”子菜单：顺序/随机/列表循环/单曲循环 单选，点击切换；
+  7. 分隔线；
+  8. “显示 Caw”“退出 Caw”。
+- DBusMenu 属性使用 `icon-name`（freedesktop symbolic 图标）、`toggle-type/toggle-state`
+  单选状态、`children-display=submenu`；`GetLayout` 返回根据播放状态（曲目/时长/音量/模式/
+  播放状态）计算出的 revision，客户端重新拉取时能刷新文案与勾选。
+- 新增 `PlatformCommand::SetPlaybackMode` 与 `PlayerApp::set_playback_mode`，
+  托盘菜单切换模式与主界面/配置保持同步。
+- 验证：`GetLayout` 输出包含信息行/图标/子菜单与勾选状态；菜单 Event 实测
+  50% 音量 → MPRIS Volume=0.5，随机 → Shuffle=true，单曲循环 → LoopStatus=Track。

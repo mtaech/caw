@@ -6,7 +6,9 @@ use crate::ui::icons::CawIcon;
 /// Playback mode: sequence, shuffle, repeat list, or repeat one.
 ///
 /// Serialized as part of `AppConfig` (`config.json`), hence the serde derives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PlaybackMode {
     #[default]
@@ -56,7 +58,7 @@ pub enum RepeatMode {
 }
 
 /// Playback state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum PlaybackState {
     #[default]
     Stopped,

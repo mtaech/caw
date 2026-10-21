@@ -905,6 +905,14 @@ impl PlayerApp {
         cx.notify();
     }
 
+    /// Set the playback mode directly (used by the tray menu).
+    pub fn set_playback_mode(&mut self, mode: PlaybackMode, cx: &mut Context<Self>) {
+        self.playback_mode = mode;
+        self.update_config(|config| config.playback_mode = mode);
+        self.flush_config(cx);
+        cx.notify();
+    }
+
     /// Mutate persisted preferences.
     ///
     /// Only marks the config dirty; `flush_config` (driven by the 250ms tick)

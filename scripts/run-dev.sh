@@ -1,4 +1,4 @@
 #!/bin/bash
-# Development launcher for Caw — called from the .desktop file.
+# Development launcher for Caw (pure Rust, gpui-kit).
 set -euo pipefail
-cd "$(dirname "$0")/.." && exec cargo tauri dev
+cd "$(dirname "$0")/.." && exec cargo run "$@"

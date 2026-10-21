@@ -1,48 +1,31 @@
 #!/bin/bash
-# Caw development setup: install icons and desktop file so the app
-# shows an icon in the dock / taskbar under Wayland (GNOME, KDE).
-# On Wayland, window icons are resolved via .desktop file matching,
-# not via GTK's gtk_window_set_icon(). This script creates the
-# required symlinks for `cargo tauri dev`.
-
+# Development-only setup: install a hicolor icon and a .desktop entry so the
+# GPUI window shows an icon in the dock / taskbar on Wayland (GNOME, KDE).
+# It points at `cargo run`; for a real install, ship the release binary and
+# update Exec in the desktop file.
 set -euo pipefail
 
-# Resolve the project root (parent of scripts/)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# ── 1. Install icon into the system theme ──
-ICON_SRC="$ROOT/src-tauri/icons/icon.png"
-ICON_DEST="$HOME/.local/share/icons/hicolor/128x128/apps/caw.png"
-
+ICON_SRC="$ROOT/assets/icons/music.svg"
+ICON_DEST="$HOME/.local/share/icons/hicolor/scalable/apps/caw.svg"
 mkdir -p "$(dirname "$ICON_DEST")"
-if [ ! -f "$ICON_DEST" ]; then
-  cp "$ICON_SRC" "$ICON_DEST"
-  echo "installed icon -> $ICON_DEST"
-else
-  echo "icon already exists: $ICON_DEST"
-fi
+cp -f "$ICON_SRC" "$ICON_DEST"
+echo "installed icon -> $ICON_DEST"
+gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
-# Update icon cache (harmless if hicolor theme doesn't exist)
-gtk-update-icon-cache -f ~/.local/share/icons/hicolor 2>/dev/null || true
-
-# ── 2. Install .desktop file ──
 DESKTOP_DEST="$HOME/.local/share/applications/cn.cyber-nest.caw.desktop"
-
-cat > "$DESKTOP_DEST" << EOF
+mkdir -p "$(dirname "$DESKTOP_DEST")"
+cat > "$DESKTOP_DEST" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Caw (dev)
-Comment=Local music player (development)
+Name=Caw
+Comment=Local music player (GPUI)
 Exec=$ROOT/scripts/run-dev.sh
-Icon=$ROOT/src-tauri/icons/icon.png
+Icon=caw
 Terminal=false
-Categories=Audio;Music;Player;
-StartupWMClass=Caw
-NoDisplay=true
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=caw
 EOF
-echo "installed .desktop -> $DESKTOP_DEST"
-
-echo ""
-echo "Done. Restart GNOME Shell (Alt+F2, r) or relogin, then launch with:"
-echo "  cd $ROOT && cargo tauri dev"
+echo "installed desktop entry -> $DESKTOP_DEST"

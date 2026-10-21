@@ -1,0 +1,312 @@
+# PLAN.md — Caw 迁移计划：Tauri v2 + Vue 3 → 纯 Rust gpui-kit
+
+> 本文档是本次迁移的权威计划（source of truth）。实施过程中如与本文冲突，以本文为准；
+> 若必须偏离，先更新本文并在团队频道说明。
+
+## 一、目标
+
+把 Caw 从 **Tauri v2 + Vue 3 + TypeScript + Tailwind** 迁移为**纯 Rust 单 crate 桌面应用**：
+
+- GUI：`gpui-kit` 0.7（内含 GPUI / gpui-base / gpui-component / gpui-kit-assets）
+- 音频：Symphonia 解码 + cpal 输出（沿用旧后端逻辑）
+- 存储：SQLite（rusqlite，曲库歌单）+ `~/.config/caw/config.json`（偏好设置）
+- 平台：Linux 优先（MPRIS、系统托盘、日志、窗口状态）
+- 移除：`src-tauri/`、`src/*.vue`、`package.json`、`vite.config.ts`、npm/Tauri CI
+
+**验收（硬标准）**
+
+1. `cargo check --all-targets` 0 error；`cargo clippy --all-targets` 无 error（warning 可接受但尽量清）。
+2. `cargo fmt --check` 通过。
+3. `cargo run` 能启动窗口：侧栏/内容区/播放栏可见，扫描曲库、播放/暂停/上下首/音量/进度可用。
+4. 功能对齐旧版（见 §四 功能清单），无 Tauri/npm/node 引用残留。
+5. CI（`.github/workflows/build-rpm.yml`）改为 cargo 构建并在本地可复现。
+6. 文档（README / CONTEXT / AGENTS / 本文件）与最终实现一致。
+
+## 二、当前状态（迁移快照）
+
+- HEAD `87e8833 chore: remove netease integration before gpui-kit migration`。
+- 工作树已完成**删除侧**：99 个 Tauri/Vue 文件处于 staged deletion（`git status` 中 D），**尚未提交**。
+- 新增侧为未跟踪的纯 Rust 实现（`src/`，约 4160 行）：
+  `main.rs / app.rs / assets.rs / paths.rs / db.rs / audio/* / models/* / ui/*`，
+  已写完 6 个视图、播放栏、侧栏、图标、播放器线程的**初稿**。
+- `cargo check` 当前 **95 个编译错误**，几乎全部是 gpui-kit 0.7 API 漂移（导入路径、
+  Theme token 名、trait 未引入、AsyncApp/Context 混用等），不是设计问题。
+- 已有能力：后台扫描、Symphonia 解码、cpal 播放、队列/顺序/随机/循环、搜索过滤、
+  全部音乐/艺术家/专辑/歌单/文件夹/设置视图、SQLite 歌单与音乐目录持久化。
+- 缺失能力：主题切换（亮/暗/系统）、字体设置、窗口关闭确认/托盘/MPRIS/日志/窗口状态、
+  歌单对话框（创建/删除/加歌）、队列抽屉的拖拽排序与历史、表格列宽拖拽、
+  长标题跑马灯、无封面渐变占位、原生目录选择器、CI 与文档更新。
+
+## 三、目标架构
+
+```text
+src/
+├── main.rs              # bootstrap: application().with_assets(CawAssets).run / init / open_window
+├── app.rs               # PlayerApp：唯一顶层状态 + 播放/曲库/歌单/设置所有 action
+├── root_view.rs         # impl Render for PlayerApp：整体布局、快捷键、全局 overlays
+├── assets.rs            # CawAssets（内嵌 svg）+ 合并 gpui-kit 默认资源
+├── paths.rs             # ~/.config/caw/ 路径
+├── config.rs            # [P2] AppConfig JSON：主题/字体/音量/播放模式/窗口状态/关闭行为
+├── logging.rs           # [P3] 文件日志（替换裸 eprintln）
+├── db.rs                # SQLite：playlists / playlist_tracks / music_dirs / settings
+├── models/{track,playlist}.rs
+├── audio/{library,decoder,player}.rs
+├── platform/{mod,mpris,tray,window_state}.rs   # [P3]
+└── ui/
+    ├── mod.rs
+    ├── icons.rs         # CawIcon -> IconNamed
+    ├── sidebar.rs
+    ├── player_bar.rs
+    ├── dialogs.rs       # [P2] 统一 confirm / playlist / 关闭确认（window.open_dialog）
+    ├── marquee.rs       # [P2] 长文本自动滚动
+    ├── cover.rs         # [P2] 封面 + 确定性渐变占位
+    └── content/
+        ├── mod.rs       # 按 nav/detail 分发
+        ├── tracks.rs    # 全部音乐 + 曲目表
+        ├── artists.rs
+        ├── albums.rs
+        ├── playlists.rs
+        ├── folders.rs
+        ├── settings.rs
+        └── queue.rs
+```
+
+### 3.1 根视图约定（关键决策）
+
+- **`PlayerApp` 自身实现 `Render`**（`src/root_view.rs`），不再用 `CawWindow` 包一层。
+  窗口 `Root::new(app_entity, window, cx)`；位置轮询定时器在 `main.rs` 拿到 entity 后 `cx.spawn`。
+- UI 渲染函数签名保持：
+  ```rust
+  pub fn render_sidebar(app: &PlayerApp, window: &mut Window, cx: &mut Context<PlayerApp>) -> impl IntoElement
+  pub fn render_content(app: &PlayerApp, window: &mut Window, cx: &mut Context<PlayerApp>) -> impl IntoElement
+  pub fn render_player_bar(app: &PlayerApp, window: &mut Window, cx: &mut Context<PlayerApp>) -> impl IntoElement
+  ```
+  根视图以 `let app: &PlayerApp = self;` 只读访问，handler 一律 `cx.entity().clone()` 后 `entity.update(cx, ...)`。
+- 快捷键：根节点 `.track_focus` / `.on_key_down`，但**搜索框聚焦时不得抢占 Space/箭头**；
+  用 `app.search_input.read(cx).focus_handle(cx).is_focused(window)` 判断。
+- 主题：启动时读 config → `Theme::change(mode, None, cx)`；字体写入 `Theme::global_mut(cx).font_family`。
+- 模态框优先用 gpui-kit 的 `window.open_dialog(...)` / `open_alert_dialog(...)` /
+  `window.push_notification(...)`，不再手写绝对定位遮罩。
+
+### 3.2 给 UI 层的最小 PlayerApp 接口（core 负责实现/维护）
+
+UI 已使用、需保持稳定的成员：
+`library, filtered_indices, search_query, search_input, selected_nav, detail_target,
+selected_track_id, playback_state, playback_mode, current_track, queue, queue_index,
+position, duration, volume, is_muted, seeking, progress_slider, volume_slider, db,
+playlists, music_dirs, scanning, show_queue`；
+方法：`rescan, apply_filter, select_nav, open_detail, back_to_list, play_track, play_all,
+toggle_play_pause, next_track, prev_track, seek_to, set_volume, toggle_mute,
+cycle_playback_mode, update_position, toggle_queue, play_queue_index, clear_queue,
+create_playlist, delete_playlist, add_track_to_playlist, remove_track_from_playlist,
+add_music_dir, remove_music_dir`。
+
+新增（P2）：
+```rust
+pub fn set_theme_mode(&mut self, mode: ThemeMode, cx: &mut Context<Self>);
+pub fn set_font_family(&mut self, family: SharedString, cx: &mut Context<Self>);
+pub fn update_config(&mut self, f: impl FnOnce(&mut AppConfig));   // 脏标记 + 节流落盘
+pub fn playlist_tracks(&self, id: i64) -> Vec<Arc<Track>>;         // 或 UI 直接 app.db.get_playlist_tracks
+```
+**任何 UI 需要而 app.rs 没有的接口，先给 core 发消息，不要直接改 app.rs。**
+
+## 四、功能对齐清单（旧版 README/UI-POLISH 提取）
+
+| # | 功能 | 现状 | 负责 |
+|---|------|------|------|
+| 1 | 扫描多目录 + 去重 + 后台扫描 | 有初稿 | core |
+| 2 | Symphonia 解码 / cpal 输出 / 暂停 / seek / 音量 | 有初稿 | core |
+| 3 | 顺序 / 随机 / 列表循环 / 单曲循环 | 有初稿 | core |
+| 4 | 搜索过滤（标题/歌手/专辑） | 有初稿 | content |
+| 5 | 全部音乐表（当前行高亮、双击播放、行内操作） | 初稿 | content |
+| 6 | 艺术家列表 + 详情 | 初稿 | content |
+| 7 | 专辑网格 + 详情 + 封面 | 初稿 | content |
+| 8 | 文件夹视图 + 面包屑 | 初稿 | content |
+| 9 | 歌单：创建 / 删除 / 加歌 / 移除 / 详情 | 初稿缺对话框 | content + chrome |
+| 10 | 队列抽屉：查看 / 跳播 / 清空 /（P2 拖拽排序、历史、存为歌单） | 初稿 | content |
+| 11 | 侧栏导航 + 歌单列表 + 扫描状态 | 初稿 | chrome |
+| 12 | 播放栏（封面、歌名/歌手、进度、传输、模式、音量、队列按钮） | 初稿 | chrome |
+| 13 | 设置：音乐目录管理、关于 | 初稿 | content |
+| 14 | 设置：主题（亮/暗/系统）、字体 | 缺 | content + core |
+| 15 | 关闭确认 / 关闭到托盘 | 缺 | chrome + platform |
+| 16 | 系统托盘 | 缺 | platform |
+| 17 | MPRIS（Linux 媒体键/桌面小部件） | 缺 | platform |
+| 18 | 文件日志（轮转） | 缺 | platform |
+| 19 | 窗口位置/尺寸/状态持久化 | 缺 | platform |
+| 20 | 长标题跑马灯 / 封面骨架 / 渐变占位 | 缺 | chrome + content |
+| 21 | 键盘快捷键（空格、←/→、↑/↓，编辑时不抢占） | 有初稿 | Lead |
+| 22 | 原生目录选择器（rfd）或路径输入兜底 | 缺 | content |
+
+## 五、阶段与里程碑
+
+### P0 — 计划与基建（Lead，进行中）
+- 写 PLAN.md / docs/gpui-kit-api-notes.md；建任务板；拉起团队。
+- Cargo.toml 依赖审计；确认 gpui-kit 0.7 实际 API。
+
+### P1 — 编译基线 + 结构拆分（全员并行，目标：cargo check 0 error）
+- **Lead**：`main.rs` 重写（root view 直挂 PlayerApp、资源、主题初始化、定时器）、
+  `root_view.rs`、`ui/mod.rs`、`icons.rs`、`assets.rs`；集成与收口。
+- **content**：修 `src/ui/content.rs` 全部错误 → 绿后拆分为 `src/ui/content/*`，保持绿。
+- **chrome**：修 `src/ui/sidebar.rs`、`src/ui/player_bar.rs`。
+- **core**：修 `src/app.rs`、`src/audio/**`、`src/models/**`、`src/db.rs`，
+  `app.rs` 里 `cx.spawn`/`decode_file` 借用与线程问题。
+- **platform**（可与 P1 并行，后接入）：`src/logging.rs` 初版 + 调研 MPRIS/托盘方案，
+  写清依赖清单发给 Lead。
+- 完成标志：`cargo check --all-targets` 0 error（允许 warning）。
+
+### P2 — 功能补齐与重构（目标：功能对齐 §四）
+- content：拆模块后补 5/6/7/8/9/10/13/14/22 缺口；对话框统一走 `dialogs.rs`。
+- chrome：`dialogs.rs`（confirm/create playlist/add-to-playlist/close confirm）、
+  `marquee.rs`、播放栏细节、侧栏歌单区（SidebarGroup 无 header，用 suffix 或自定义行）。
+- core：`config.rs` + 持久化（主题/字体/音量/模式/窗口状态/关闭行为）、歌单接口补全。
+- Lead：`root_view.rs` 接入 dlgs/主题/字体/快捷键屏蔽、集成与 `cargo check` 收口。
+
+### P3 — 平台集成（Linux 优先）
+- `logging.rs` 文件日志（`caw: ` 前缀保留）+ 轮转。
+- MPRIS：zbus（纯 Rust）实现 org.mpris.MediaPlayer2 + Player 接口，映射播放/暂停/上下首/seek/音量。
+- 托盘：ksni（StatusNotifierItem，走 zbus，无需 GTK 主循环）；菜单：显示/播放暂停/上下首/退出。
+- 关闭行为：关闭到托盘 + 退出确认 dialog；窗口 bounds 持久化。
+- 依赖由 Lead 统一加入 Cargo.toml。
+
+### P4 — 质量与交付
+- `cargo fmt` / `cargo clippy --all-targets` / `cargo check` 全绿。
+- `cargo run` 启动验证（DISPLAY=:1 可用）；修 UI 崩溃/panic。
+- 文档：README（技术栈/命令/功能）、CONTEXT.md（术语更新）、AGENTS.md（架构/命令）、
+  PLAN.md（状态与后续）。
+- CI：`.github/workflows/build-rpm.yml` 改为 cargo build + 产物打包；删除 Tauri/Node 步骤。
+- 清理：assets 重复图标、`scripts/` 中 Tauri 脚本、`.gitignore`、git 提交。
+- Lead 最终 review diff + 提交。
+
+## 六、团队与写作用域（advisory lock）
+
+| 成员 | 写作用域 | 任务 |
+|------|----------|------|
+| lead | `src/main.rs`, `src/root_view.rs`, `src/ui/mod.rs`, `src/ui/icons.rs`, `src/assets.rs`, `Cargo.toml`, `PLAN.md`, `docs/**`, `.github/**`, `README.md`, `AGENTS.md`, `CONTEXT.md` | 基建 + 集成 + 收口 + 提交 |
+| content | `src/ui/content.rs` → `src/ui/content/**`, `src/ui/cover.rs` | 6 个内容视图 |
+| chrome | `src/ui/sidebar.rs`, `src/ui/player_bar.rs`, `src/ui/dialogs.rs`, `src/ui/marquee.rs` | 侧栏/播放栏/对话框 |
+| core | `src/app.rs`, `src/audio/**`, `src/models/**`, `src/db.rs`, `src/paths.rs`, `src/config.rs` | 状态/音频/持久化 |
+| platform | `src/logging.rs`, `src/platform/**` | 日志/MPRIS/托盘/窗口状态 |
+
+## 七、协作规则（必须遵守）
+
+1. **只改自己写作用域内的文件。** 需要跨文件改动 → 发消息给 owner / Lead，由对方改。
+2. **只有 Lead 操作 git index**：不要 `git add/commit/reset/checkout/clean/stash/branch/rm`。
+   可以用只读命令：`git status`、`git log`、`git show HEAD:<path>`（读旧实现）。
+3. **不新增依赖**（Cargo.toml 只有 Lead 改）；需要依赖 → 发消息给 Lead，写清 crate/版本/features。
+4. **不跑全局 `cargo fmt`**（Lead 在集成时统一跑）；可以手工保持格式。
+5. `cargo check` 共用 target 目录，可能等锁；按路径过滤自己文件的错误：
+   ```bash
+   cargo check --all-targets --message-format=short 2>&1 | grep -E '^src/ui/content' | head -60
+   ```
+6. **绝不臆造 API**：以上游 crate 源码为准（见 docs/gpui-kit-api-notes.md 顶部路径），
+   或 `https://gpui-kit.com/component/{name}.md`。
+7. 代码注释/技术文档用英文；UI 文案与 PLAN 用中文；日志用 `eprintln!("caw: ...")`（P3 前）。
+8. 每个任务完成时：跑自己范围的 check，**明确报告**：改了哪些文件、验证命令与结果、
+   剩余风险；然后 `team_task_update(action=complete)` 并给 Lead 发消息。
+9. 被阻塞立即发消息，不要空转。共享任务先 `team_task_get` 拿 revision 再 claim/complete。
+
+## 八、验证清单（P4 收口）
+
+- [ ] `cargo check --all-targets` → 0 error
+- [ ] `cargo clippy --all-targets` → 0 error
+- [ ] `cargo fmt --check` → pass
+- [ ] `timeout 20 cargo run` 启动无 panic；日志出现 `caw: scan complete`
+- [ ] 手动 UI 冒烟：切 6 个视图 / 搜索 / 播放 / 暂停 / 上下首 / 音量 / 进度 / 歌单增删
+- [ ] 主题切换、字体切换、关闭确认、托盘、MPRIS（`playerctl`）可用
+- [ ] `grep -ri "tauri\|vue\|npm\|vite" --exclude-dir=target --exclude-dir=.git .` 无残留
+- [ ] 文档与实现一致；CI 可复现
+
+## 九、风险
+
+- gpui-kit 0.7 API 与旧示例差异大 → 以 vendored 源码为准，先小步 check。
+- 子系统无测试套件 → 以 `cargo check/clippy` + 启动冒烟为主，不编造无意义测试。
+- MPRIS/托盘的线程模型与 GPUI 主循环隔离 → 通过 channel + 250ms 轮询接入，禁止在回调里动 Entity。
+- 多 agent 并发编译抢锁/写冲突 → 写作用域隔离 + 只有 Lead 提交 + 按文件过滤错误。
+- 音频/UI 耦合的 `cx.spawn` 借用错误 → 先 clone 所需数据再 spawn。
+
+## 十、实施记录与决策（持续更新）
+
+### 2026-10-21 / P1 完成
+
+- `cargo check --all-targets` 首次达到 **0 error**（P1 完成）。`src/ui/content.rs` 拆分为
+  `src/ui/content/{mod,tracks,artists,albums,playlists,folders,settings,queue}.rs`；
+  侧栏与播放栏完成 API 对齐；`main.rs` + `root_view.rs` 完成"PlayerApp 即根视图"重构。
+- 新增模块：`config.rs`（AppConfig JSON）、`logging.rs`（文件日志 + 轮转）。
+
+### 关键决策
+
+1. **根视图**：`impl Render for PlayerApp`（`root_view.rs`），删除 `CawWindow` 包装；
+   250ms 定时器在 `main.rs` 中用 `WeakEntity` 驱动，窗口关闭时自动退出。
+2. **模态框**：歌单创建/加歌用根视图内联遮罩（`app.create_playlist_input` /
+   `app.add_to_playlist_track`）；退出确认用 gpui-kit `window.open_alert_dialog`
+   （`ui/dialogs.rs`），关闭行为由 `AppConfig.close_to_tray` 决定（最小化 vs 确认退出）。
+3. **系统托盘暂缓**：`ksni 0.3.7` 依赖 zbus 5.19 已不再生成的 `DBUS_CONTEXT` task-local，
+   实测无法编译（~37 个错误，全部在 ksni 内部）。不在 0.4.0 引入托盘；MPRIS 用 zbus 直连
+   实现。后续可手写 StatusNotifierItem 或等 ksni 修复。
+4. **zbus 依赖**：仅 Linux 目标依赖 `zbus = { version = "5", features = ["blocking-api"] }`，
+   避免影响 Windows CI。
+5. **目录选择器**：不引入 `rfd`（GTK/xdg-portal 依赖与主循环问题）；设置页用应用内路径输入
+   对话框（`window.open_dialog` + `InputState`）。
+6. **窗口状态**：由 `platform::window_state` 独立持久化到 `~/.config/caw/window.json`
+   （原子 tmp+rename），不阻塞 `config.rs`。
+7. **封面加载**：运行时封面一律 `img(PathBuf)`；`String` 会走 AssetSource 而加载失败。
+
+### 已知遗留（0.4.0 之后）
+
+- 系统托盘（见决策 3）。
+- 队列拖拽排序 / 播放历史 UI 的完整交互（core 提供数据 API，content 渲染）。
+- 表格列宽拖拽、封面主色衍生背景等 UI-POLISH P2 项。
+- 无自动化测试；以 `cargo check/clippy` + 启动冒烟为主。
+
+## 十一、交付验收结果（2026-10-21）
+
+### 自动化验收（全部通过）
+
+```text
+cargo check --all-targets      -> 0 errors, 0 warnings (仅 ~/.cargo 配置提示)
+cargo clippy --all-targets     -> 0 errors, 0 code warnings
+cargo fmt --check              -> pass
+cargo test --all-targets       -> 5 passed (config round-trip / corrupt defaults / logging rotation)
+```
+
+### 运行时验收（DISPLAY=:1 / Wayland 实测）
+
+- 启动成功：窗口渲染、曲库扫描（193 首）、播放/暂停/上下首/进度/音量全部可用。
+- 会话恢复：重启后恢复上次曲目与 117.4s 位置（暂停态），日志确认 restored session at 117.4s。
+- MPRIS 实测（busctl）：org.mpris.MediaPlayer2.caw 注册成功；Identity=Caw、PlaybackStatus、
+  Metadata（含 artUrl）、Position 正常；Play/Pause/Next/Previous/Seek/Volume/Raise 均生效；
+  播放位置随音频推进（144.0s -> 147.0s / 3s）。
+- 主题：config.json theme_mode=light 启动即为亮色；恢复 dark 后为暗色（截图验证）。
+- 设置页：外观（亮/暗）、字体（Noto Sans CJK SC / Noto Sans / DejaVu Sans）、行为（退出/最小化）、
+  音乐文件夹（增删/重扫）渲染正常。
+- 日志：~/.config/caw/caw.log 2MiB x 5 轮转，控制台保留 caw: 前缀。
+
+### 本阶段额外完成（超出 P1 的 P2/P3 项）
+
+- 设置：主题/字体/关闭行为 + 应用内路径对话框（无 rfd 依赖）。
+- 封面：确定性渐变占位（专辑/艺术家/详情）；运行时封面走 img(PathBuf)。
+- 队列抽屉：保存队列为播放列表、最近播放历史、清空、跳播。
+- 曲目表：预计算 Arc 队列（去掉 O(n^2) 克隆）+ 行内“添加到播放列表”。
+- 歌单删除二次确认（AlertDialog）、退出确认、窗口几何持久化（window.json）。
+- 表格/播放栏/侧栏扫码状态、空状态、跑马灯标题。
+
+### 明确遗留（下一版本）
+
+- 系统托盘（ksni 与 zbus 5.19 不兼容；需手写 StatusNotifierItem 或等上游修复）。
+- 队列拖拽排序、播放列表内“从歌单移除”的独立入口。
+- 表格列宽拖拽、封面主色衍生详情页背景、托盘/媒体键图标资源完善。
+- 打包：CI 目前产出 tar.gz/zip；deb/rpm/AppImage 需要额外的打包工具链。
+- 无自动化 UI 测试（GUI 以启动 + MPRIS + 截图冒烟为准）。
+
+### 迁移结论
+
+Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中的 Tauri 字样仅出现在历史说明。
+后续开发遵循 AGENTS.md 与 docs/gpui-kit-api-notes.md。
+
+### 热修复：所有视图无法滚动（2026-10-21）
+
+- 根因：内容视图根节点 `v_flex().size_full()` 把高度强制为滚动视口高度，GPUI 计算
+  `content_size` 时得到与视口相同的尺寸，`scroll_max = 0`，滚轮事件被忽略（内容只是被裁剪）。
+- 修复：`src/ui/content/*.rs` 的视图根节点改为 `.w_full()`（自然高度），滚动容器
+  （`.id("content-scroll").overflow_y_scroll()`）即可得到真实内容高度；8 处替换。
+- 验证：重启后窗口可滚动到第 11–28 行（截图确认滚动偏移生效），队列抽屉/设置页同理。

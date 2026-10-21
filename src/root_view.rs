@@ -58,7 +58,7 @@ impl Render for PlayerApp {
                                     "titlebar close requested (close_to_tray={close_to_tray})"
                                 );
                                 if close_to_tray {
-                                    close_entity.update(cx, |app, cx| app.flush_config(cx));
+                                    close_entity.update(cx, |app, _| app.save_state_now());
                                     // Remove the taskbar entry too, not just minimize.
                                     crate::platform::kwin::set_taskbar_visible(false);
                                     window.minimize_window();

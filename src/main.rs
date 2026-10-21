@@ -65,7 +65,7 @@ fn main() {
                         let close_to_tray = close_entity.read(cx).config.close_to_tray;
                         crate::log_info!("window close requested (close_to_tray={close_to_tray})");
                         crate::platform::window_state::save_now(window);
-                        close_entity.update(cx, |app, cx| app.flush_config(cx));
+                        close_entity.update(cx, |app, _| app.save_state_now());
                         if close_to_tray {
                             crate::platform::kwin::set_taskbar_visible(false);
                             window.minimize_window();
@@ -113,6 +113,8 @@ fn main() {
                                     });
                                 }
                                 PlatformCommand::Quit => {
+                                    crate::log_info!("quit requested; saving session");
+                                    let _ = polled.update(cx, |app, _| app.save_state_now());
                                     let _ = window_handle.update(cx, |_, window, _| {
                                         platform::window_state::save_now(window);
                                     });

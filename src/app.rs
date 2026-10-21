@@ -146,6 +146,8 @@ pub struct PlayerApp {
     play_generation: u64,
     /// Whether the previous session (track/queue/position) has been restored.
     session_restored: bool,
+    /// Last periodic session save, used to keep `config.last_position` fresh.
+    last_session_save: Instant,
 }
 
 impl PlayerApp {
@@ -303,6 +305,7 @@ impl PlayerApp {
             last_config_save: Instant::now() - Duration::from_secs(1),
             play_generation: 0,
             session_restored: false,
+            last_session_save: Instant::now(),
         };
 
         // Push the persisted volume into the audio engine before the first play.
@@ -817,6 +820,13 @@ impl PlayerApp {
             return;
         }
 
+        // Keep the persisted session close to the live position so quitting (or a
+        // crash) does not lose the progress made since the track started.
+        if self.last_session_save.elapsed() >= Duration::from_secs(5) {
+            self.last_session_save = Instant::now();
+            self.save_state_now();
+        }
+
         use std::sync::atomic::Ordering::Relaxed;
 
         let is_playing = self.player.state.is_playing.load(Relaxed);
@@ -1035,6 +1045,17 @@ impl PlayerApp {
         self.config_dirty = true;
     }
 
+    /// Persist the current session synchronously (used on quit and every few
+    /// seconds while playing). Bypasses the throttle: quitting must not lose the
+    /// last few seconds of progress.
+    pub fn save_state_now(&mut self) {
+        self.persist_session();
+        if let Err(err) = self.config.save() {
+            crate::log_error!("failed to save session state: {err}");
+        }
+        self.config_dirty = false;
+    }
+
     /// Push a track onto the bounded play history (most recent first).
     fn push_history(&mut self, track: &Track) {
         let path = track.path.to_string_lossy().into_owned();
@@ -1227,9 +1248,6 @@ impl Drop for PlayerApp {
         // Final flush on shutdown: capture the exact transport position and any
         // change made inside the write-throttle window. The file is tiny (a few
         // hundred bytes) and this runs during teardown, not on a hot path.
-        self.persist_session();
-        if let Err(err) = self.config.save() {
-            crate::log_error!("failed to save config on exit: {}", err);
-        }
+        self.save_state_now();
     }
 }

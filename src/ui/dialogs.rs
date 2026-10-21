@@ -25,7 +25,7 @@ pub fn open_close_confirm(window: &mut Window, cx: &mut App, entity: Entity<Play
             .ok_variant(ButtonVariant::Danger)
             .cancel_text("取消")
             .on_ok(move |_, _, cx| {
-                entity.update(cx, |app, cx| app.flush_config(cx));
+                entity.update(cx, |app, _| app.save_state_now());
                 cx.quit();
                 true
             })

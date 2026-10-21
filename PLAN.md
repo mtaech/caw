@@ -459,3 +459,18 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   托盘菜单切换模式与主界面/配置保持同步。
 - 验证：`GetLayout` 输出包含信息行/图标/子菜单与勾选状态；菜单 Event 实测
   50% 音量 → MPRIS Volume=0.5，随机 → Shuffle=true，单曲循环 → LoopStatus=Track。
+
+### 修复：退出应用不保存播放进度（2026-10-21）
+
+- 根因：`persist_session()` 只在“开始播放 / 暂停 / seek / 切歌”时调用，播放过程中
+  `config.last_position` 一直停留在上一次事件的值；正常退出依赖 `Drop` 再保存，
+  但如果退出路径没有走到 Drop（或在写盘节流窗口内），位置就会丢失，重启即 0。
+- 修复：
+  1. 播放中每 5 秒调用 `save_state_now()`（同步原子写 config.json），
+     即使崩溃/被 kill 也只丢最近几秒；
+  2. 退出相关路径改为**同步**保存，不再依赖节流或 Drop：托盘/MPRIS Quit、
+     退出确认框“退出”、关闭到托盘（最小化前）都调用 `save_state_now()`；
+  3. `Drop for PlayerApp` 仍保留最终同步保存兜底。
+- 验证（真实进程）：播放到 74.6s → MPRIS Quit → 进程退出、config.last_position=74.96；
+  重启日志 `restored session at 75.0s`，MPRIS Position≈75s；受控测试写入 42.0s 后启动，
+  状态为 Paused、Position 恰好 42.0s。

@@ -58,6 +58,8 @@ pub enum PlatformCommand {
     SeekBy(f64),
     /// Set volume in 0.0 - 1.0.
     SetVolume(f32),
+    /// Toggle mute, restoring the previous volume.
+    ToggleMute,
     /// Switch playback mode (sequence / shuffle / repeat list / repeat one).
     SetPlaybackMode(PlaybackMode),
     /// Bring the main window to the foreground.

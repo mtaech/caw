@@ -164,6 +164,7 @@ fn apply_platform_command(
             app.seek_to(target, cx);
         }
         PlatformCommand::SetVolume(volume) => app.set_volume(volume, cx),
+        PlatformCommand::ToggleMute => app.toggle_mute(cx),
         PlatformCommand::SetPlaybackMode(mode) => app.set_playback_mode(mode, cx),
         PlatformCommand::ShowWindow | PlatformCommand::Quit => {}
     }

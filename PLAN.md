@@ -504,3 +504,11 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   - 顺带 `set_volume` 已写入 `config.volume`，音量现在跨重启保留。
 - 验证：`GetLayout(7)` 无 radio，含“当前音量 38%”与 ±5%/静音/预设；把音量改成 62% 时
   dbus-monitor 捕获 3 条 LayoutUpdated，根布局立即显示“音量 62%”。
+
+### 发布 0.5.0（2026-10-21）
+
+- 版本从 0.4.0 升到 **0.5.0**，覆盖本轮功能：Tauri→gpui-kit 迁移收尾、系统托盘
+  （SNI + DBusMenu，含 KDE 任务栏隐藏）、音乐播放器风格菜单（正在播放/音量/模式子菜单）、
+  搜索式系统字体选择、双击播放/正在播放高亮、定位正在播放（浮动按钮 + 点歌名）、
+  会话恢复与退出保存进度、滚动条常驻、rfd 原生目录选择、deb/rpm/AppImage 打包脚本。
+- 产物：`dist/caw_0.5.0_amd64.deb`（12MB，`dpkg-deb -f` 校验 Name=0.5.0/amd64 通过）。

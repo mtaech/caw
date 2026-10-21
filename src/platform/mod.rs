@@ -7,8 +7,8 @@
 //! * window_state -- persisted window geometry (~/.config/caw/window.json) so the
 //!   window reopens at the same size/position.
 //!
-//! The system tray is deferred for 0.4.0 (ksni 0.3.7 is incompatible with zbus 5.19);
-//! see PLAN.md.
+//! The tray is a hand-written StatusNotifierItem + DBusMenu implementation (ksni 0.3.7
+//! is incompatible with zbus 5.19); see PLAN.md.
 //!
 //! # Threading contract
 //!

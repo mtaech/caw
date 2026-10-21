@@ -26,8 +26,6 @@ const ITEM_PATH: &str = "/StatusNotifierItem";
 const MENU_PATH: &str = "/MenuBar";
 const KDE_WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const FDO_WATCHER: &str = "org.freedesktop.StatusNotifierWatcher";
-const ICON_NAME: &str = "audio-x-generic";
-
 // Menu item ids.
 const ITEM_NOW_PLAYING: i32 = 1;
 const ITEM_SEP_TOP: i32 = 2;
@@ -82,10 +80,12 @@ pub(crate) fn spawn(shared: Arc<Shared>) {
 
 fn run(shared: Arc<Shared>) -> zbus::Result<()> {
     let connection = Connection::session()?;
+    let pixmaps = Arc::new(icon_pixmaps());
     connection.object_server().at(
         ITEM_PATH,
         StatusNotifierItem {
             shared: Arc::clone(&shared),
+            pixmaps,
         },
     )?;
     connection.object_server().at(
@@ -140,6 +140,25 @@ fn register(connection: &Connection, watcher: &str, item_service: &str) -> zbus:
         &(item_service,),
     )?;
     Ok(())
+}
+
+fn icon_pixmaps() -> IconPixmap {
+    const ICON_PNG: &[u8] = include_bytes!("../../assets/icons/caw.png");
+    let Ok(source) = image::load_from_memory(ICON_PNG) else {
+        return Vec::new();
+    };
+    let mut pixmaps = Vec::new();
+    for size in [24u32, 32, 48, 64] {
+        let rgba = source
+            .resize_exact(size, size, image::imageops::FilterType::Lanczos3)
+            .to_rgba8();
+        let mut data = Vec::with_capacity((size * size * 4) as usize);
+        for pixel in rgba.pixels() {
+            data.extend_from_slice(&[pixel[3], pixel[0], pixel[1], pixel[2]]);
+        }
+        pixmaps.push((size as i32, size as i32, data));
+    }
+    pixmaps
 }
 
 // -- Menu layout ----------------------------------------------------------------
@@ -467,6 +486,7 @@ fn revision(snapshot: &NowPlaying) -> u32 {
 
 struct StatusNotifierItem {
     shared: Arc<Shared>,
+    pixmaps: Arc<IconPixmap>,
 }
 
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
@@ -493,12 +513,14 @@ impl StatusNotifierItem {
 
     #[zbus(property(emits_changed_signal = "const"))]
     fn icon_name(&self) -> String {
-        ICON_NAME.to_owned()
+        // Empty name makes hosts use `icon-pixmap`; a custom theme name may not
+        // be in the icon cache yet and would render as a missing-icon placeholder.
+        String::new()
     }
 
     #[zbus(property(emits_changed_signal = "const"))]
     fn icon_pixmap(&self) -> IconPixmap {
-        Vec::new()
+        (*self.pixmaps).clone()
     }
 
     #[zbus(property(emits_changed_signal = "const"))]
@@ -531,7 +553,7 @@ impl StatusNotifierItem {
         } else {
             format!("{} — {}", snapshot.title, snapshot.artist)
         };
-        (ICON_NAME.to_owned(), Vec::new(), "Caw".to_owned(), subtitle)
+        (String::new(), Vec::new(), "Caw".to_owned(), subtitle)
     }
 
     #[zbus(property(emits_changed_signal = "const"))]

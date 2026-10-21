@@ -8,11 +8,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-ICON_SRC="$ROOT/assets/icons/music.svg"
-ICON_DEST="$HOME/.local/share/icons/hicolor/scalable/apps/caw.svg"
-mkdir -p "$(dirname "$ICON_DEST")"
-cp -f "$ICON_SRC" "$ICON_DEST"
-echo "installed icon -> $ICON_DEST"
+ICON_SVG_SRC="$ROOT/assets/icons/caw.svg"
+ICON_SVG_DEST="$HOME/.local/share/icons/hicolor/scalable/apps/caw.svg"
+ICON_PNG_SRC="$ROOT/assets/icons/caw.png"
+ICON_PNG_DEST="$HOME/.local/share/icons/hicolor/256x256/apps/caw.png"
+mkdir -p "$(dirname "$ICON_SVG_DEST")" "$(dirname "$ICON_PNG_DEST")"
+cp -f "$ICON_SVG_SRC" "$ICON_SVG_DEST"
+cp -f "$ICON_PNG_SRC" "$ICON_PNG_DEST"
+echo "installed icons -> $ICON_SVG_DEST, $ICON_PNG_DEST"
 gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 DESKTOP_DEST="$HOME/.local/share/applications/cn.cyber-nest.caw.desktop"

@@ -512,3 +512,15 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   搜索式系统字体选择、双击播放/正在播放高亮、定位正在播放（浮动按钮 + 点歌名）、
   会话恢复与退出保存进度、滚动条常驻、rfd 原生目录选择、deb/rpm/AppImage 打包脚本。
 - 产物：`dist/caw_0.5.0_amd64.deb`（12MB，`dpkg-deb -f` 校验 Name=0.5.0/amd64 通过）。
+
+### 新应用图标 + 跨平台编译修复（2026-10-21）
+
+- 采用 `assets/icons/caw.svg` 作为应用图标：去掉白色底矩形（透明背景），并生成
+  `assets/icons/caw.png`（256x256，含 alpha）供系统托盘使用。
+- 托盘不再依赖主题图标名：`StatusNotifierItem.icon-name` 置空，改用内嵌 PNG 生成的
+  `icon-pixmap`（24/32/48/64，ARGB32），KDE 图标缓存未刷新时也不会显示“?”占位。
+- 打包（deb/rpm/AppImage/tarball）同时安装 `caw.svg`（scalable）与 `caw.png`（256x256），
+  `scripts/dev-setup.sh` 同样安装两种尺寸。
+- 修复 Windows 编译：`platform::set_taskbar_visible()` 包装 KWin 专用调用，非 Linux 为 no-op；
+  CI 中 Windows job 标记 `continue-on-error`，Release 只依赖 Linux job，避免 Windows 失败
+  阻断 Linux 产物发布。

@@ -216,6 +216,17 @@ impl Platform {
     }
 }
 
+/// Ask the desktop to show or hide Caw's taskbar entry.
+///
+/// Only KDE implements this (through KWin scripting); on other platforms it is a
+/// no-op so the rest of the app compiles and behaves the same everywhere.
+pub fn set_taskbar_visible(visible: bool) {
+    #[cfg(target_os = "linux")]
+    kwin::set_taskbar_visible(visible);
+    #[cfg(not(target_os = "linux"))]
+    let _ = visible;
+}
+
 /// Build a NowPlaying snapshot from the app state. Read-only; safe to call per tick.
 pub fn snapshot_from_app(app: &PlayerApp) -> NowPlaying {
     let mut snapshot = NowPlaying {

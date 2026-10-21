@@ -58,11 +58,13 @@ mkdir -p "$DIST"
 mkdir -p "$PKGROOT/usr/bin" \
          "$PKGROOT/usr/share/applications" \
          "$PKGROOT/usr/share/icons/hicolor/scalable/apps" \
+         "$PKGROOT/usr/share/icons/hicolor/256x256/apps" \
          "$PKGROOT/usr/share/doc/caw"
 cp "$BIN" "$PKGROOT/usr/bin/caw"
 strip "$PKGROOT/usr/bin/caw" 2>/dev/null || true
 cp "$ROOT/packaging/caw.desktop" "$PKGROOT/usr/share/applications/caw.desktop"
-cp "$ROOT/assets/icons/music.svg" "$PKGROOT/usr/share/icons/hicolor/scalable/apps/caw.svg"
+cp "$ROOT/assets/icons/caw.svg" "$PKGROOT/usr/share/icons/hicolor/scalable/apps/caw.svg"
+cp "$ROOT/assets/icons/caw.png" "$PKGROOT/usr/share/icons/hicolor/256x256/apps/caw.png"
 cp "$ROOT/README.md" "$ROOT/PLAN.md" "$PKGROOT/usr/share/doc/caw/"
 
 build_tarball() {
@@ -72,7 +74,8 @@ build_tarball() {
   mkdir -p "$stage"
   cp "$PKGROOT/usr/bin/caw" "$stage/"
   cp "$ROOT/README.md" "$ROOT/PLAN.md" "$stage/"
-  cp "$ROOT/assets/icons/music.svg" "$stage/caw.svg"
+  cp "$ROOT/assets/icons/caw.svg" "$stage/caw.svg"
+  cp "$ROOT/assets/icons/caw.png" "$stage/caw.png"
   tar -C "$DIST" -czf "$DIST/$name.tar.gz" "$name"
   rm -rf "$stage"
   (cd "$DIST" && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
@@ -135,17 +138,21 @@ $DESCRIPTION
 %install
 mkdir -p %{buildroot}/usr/bin \
          %{buildroot}/usr/share/applications \
-         %{buildroot}/usr/share/icons/hicolor/scalable/apps
+         %{buildroot}/usr/share/icons/hicolor/scalable/apps \
+         %{buildroot}/usr/share/icons/hicolor/256x256/apps
 install -m 0755 "$PKGROOT/usr/bin/caw" %{buildroot}/usr/bin/caw
 install -m 0644 "$PKGROOT/usr/share/applications/caw.desktop" \
   %{buildroot}/usr/share/applications/caw.desktop
 install -m 0644 "$PKGROOT/usr/share/icons/hicolor/scalable/apps/caw.svg" \
   %{buildroot}/usr/share/icons/hicolor/scalable/apps/caw.svg
+install -m 0644 "$PKGROOT/usr/share/icons/hicolor/256x256/apps/caw.png" \
+  %{buildroot}/usr/share/icons/hicolor/256x256/apps/caw.png
 
 %files
 /usr/bin/caw
 /usr/share/applications/caw.desktop
 /usr/share/icons/hicolor/scalable/apps/caw.svg
+/usr/share/icons/hicolor/256x256/apps/caw.png
 
 %changelog
 * $build_date $MAINTAINER - $VERSION-1
@@ -169,14 +176,18 @@ build_appimage() {
   rm -rf "$appdir"
   mkdir -p "$appdir/usr/bin" \
            "$appdir/usr/share/applications" \
-           "$appdir/usr/share/icons/hicolor/scalable/apps"
+           "$appdir/usr/share/icons/hicolor/scalable/apps" \
+           "$appdir/usr/share/icons/hicolor/256x256/apps"
   cp "$PKGROOT/usr/bin/caw" "$appdir/usr/bin/caw"
   cp "$ROOT/packaging/caw.desktop" "$appdir/caw.desktop"
-  cp "$ROOT/assets/icons/music.svg" "$appdir/caw.svg"
+  cp "$ROOT/assets/icons/caw.svg" "$appdir/caw.svg"
+  cp "$ROOT/assets/icons/caw.png" "$appdir/caw.png"
   cp "$ROOT/packaging/AppRun" "$appdir/AppRun"
   chmod +x "$appdir/AppRun"
-  cp "$ROOT/assets/icons/music.svg" \
+  cp "$ROOT/assets/icons/caw.svg" \
      "$appdir/usr/share/icons/hicolor/scalable/apps/caw.svg"
+  cp "$ROOT/assets/icons/caw.png" \
+     "$appdir/usr/share/icons/hicolor/256x256/apps/caw.png"
   cp "$ROOT/packaging/caw.desktop" \
      "$appdir/usr/share/applications/caw.desktop"
 

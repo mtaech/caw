@@ -67,7 +67,7 @@ fn main() {
                         crate::platform::window_state::save_now(window);
                         close_entity.update(cx, |app, _| app.save_state_now());
                         if close_to_tray {
-                            crate::platform::kwin::set_taskbar_visible(false);
+                            crate::platform::set_taskbar_visible(false);
                             window.minimize_window();
                         } else {
                             crate::ui::dialogs::open_close_confirm(
@@ -107,7 +107,7 @@ fn main() {
                             match command {
                                 PlatformCommand::ShowWindow => {
                                     // Restoring from the tray must bring the taskbar entry back.
-                                    crate::platform::kwin::set_taskbar_visible(true);
+                                    crate::platform::set_taskbar_visible(true);
                                     let _ = window_handle.update(cx, |_, window, _| {
                                         window.activate_window();
                                     });

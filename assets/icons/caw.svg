@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <!-- 黑膠唱片同心圓紋理裁剪區（左上與右下象限） -->
+    <clipPath id="vinyl-grooves-clip">
+      <polygon points="310,310 60,310 60,60 310,60" />
+      <polygon points="310,310 560,310 560,560 310,560" />
+    </clipPath>
+
+    <!-- 唱片外圓裁剪 -->
+    <clipPath id="record-circle-clip">
+      <circle cx="310" cy="310" r="235" />
+    </clipPath>
+  </defs>
+
+
+  <!-- ==================== 1. 背景：構成主義黑膠唱片與幾何斜槓 ==================== -->
+  <g id="vinyl-background">
+    <!-- 唱片黑色基底圓 -->
+    <circle cx="310" cy="310" r="235" fill="#000000" />
+
+    <!-- 左上與右下象限的黑膠同心音軌 -->
+    <g clip-path="url(#vinyl-grooves-clip)">
+      <circle cx="310" cy="310" r="222" fill="none" stroke="#ffffff" stroke-width="6" />
+      <circle cx="310" cy="310" r="207" fill="none" stroke="#ffffff" stroke-width="6" />
+      <circle cx="310" cy="310" r="192" fill="none" stroke="#ffffff" stroke-width="6" />
+      <circle cx="310" cy="310" r="177" fill="none" stroke="#ffffff" stroke-width="6" />
+      <circle cx="310" cy="310" r="162" fill="none" stroke="#ffffff" stroke-width="6" />
+      <circle cx="310" cy="310" r="147" fill="none" stroke="#ffffff" stroke-width="6" />
+    </g>
+
+    <!-- 唱片內部白色留白區（襯托烏鴉頭部與聲浪） -->
+    <circle cx="310" cy="310" r="136" fill="#ffffff" />
+    <polygon points="310,310 470,130 580,260 560,360" fill="#ffffff" />
+
+    <!-- 構成主義標誌性對角切線（左上至右下穿刺） -->
+    <polygon points="125,135 160,100 575,545 520,545" fill="#000000" stroke="#ffffff" stroke-width="10" stroke-linejoin="miter" />
+  </g>
+
+  <!-- ==================== 2. 烏鴉半身像主體（幾何切面風格） ==================== -->
+  <g id="crow-bust">
+    <!-- 身體與頭部外輪廓白色隔離層（形成構成主義版畫鏤空感） -->
+    <polygon points="75,420 155,335 200,310 255,215 340,198 385,215 375,250 465,195 525,205 420,295 525,390 420,365 395,400 385,485 315,555 155,540" fill="#ffffff" />
+
+    <!-- 烏鴉主軀幹與頭部 -->
+    <polygon points="185,335 258,220 340,204 380,218 365,258 345,295 372,342 405,355 388,395 378,478 308,552 175,525" fill="#000000" />
+
+    <!-- 頸部幾何高光切線（白色負空間） -->
+    <polygon points="245,305 256,262 266,312" fill="#ffffff" />
+    <polygon points="262,330 302,350 368,318 372,328 305,365 292,438 288,362" fill="#ffffff" />
+    <polygon points="308,552 365,468 382,385 390,400 375,478 325,552" fill="#ffffff" />
+
+    <!-- 翅膀（左下前景幾何塊面，帶粗白邊分割） -->
+    <polygon points="75,415 155,338 228,332 268,375 245,468 152,538 85,485" fill="#000000" stroke="#ffffff" stroke-width="12" stroke-linejoin="miter" />
+    <!-- 翅膀內部羽毛幾何切線 -->
+    <polygon points="122,512 195,442 204,450 132,522" fill="#ffffff" />
+
+    <!-- 憤怒的幾何眼睛 -->
+    <!-- 怒視眉骨 -->
+    <polygon points="282,248 352,262 344,274 274,258" fill="#ffffff" />
+    <!-- 眼球 -->
+    <circle cx="320" cy="274" r="13" fill="#ffffff" />
+    <!-- 眼下幾何顴骨切面 -->
+    <polygon points="288,298 326,294 342,278 328,308" fill="#ffffff" />
+
+    <!-- 大張的鳥喙（上喙） -->
+    <polygon points="355,295 372,248 455,198 505,192 528,204" fill="#000000" stroke="#ffffff" stroke-width="8" stroke-linejoin="miter" />
+    <!-- 上喙鼻孔與內緣切線 -->
+    <polygon points="392,250 435,224 392,260" fill="#ffffff" />
+    <polygon points="362,295 512,204 518,210 372,300" fill="#ffffff" />
+
+    <!-- 大張的鳥喙（下喙） -->
+    <polygon points="355,295 525,390 485,392 368,342" fill="#000000" stroke="#ffffff" stroke-width="8" stroke-linejoin="miter" />
+    <!-- 下喙內緣高光切線 -->
+    <polygon points="368,302 512,384 498,384 374,316" fill="#ffffff" />
+  </g>
+
+  <!-- ==================== 3. 音樂與聲浪元素（音符、EQ均衡器、播放鍵） ==================== -->
+  <g id="music-sound-blast">
+    
+    <!-- 【上方聲浪】閃電擴音楔形 + 構成主義音符 -->
+    <!-- 放射閃電尖刺 -->
+    <polygon points="472,272 678,138 678,168 632,194 656,214" fill="#000000" />
+    <polygon points="518,218 558,182 564,194" fill="#000000" />
+
+    <!-- 左上單音符 (♪) -->
+    <g fill="#000000" stroke="#ffffff" stroke-width="4" stroke-linejoin="miter">
+      <!-- 幾何六邊形符頭 -->
+      <polygon points="540,162 562,146 584,158 584,178 562,190 540,178" />
+      <!-- 符幹與符尾 -->
+      <polygon points="570,165 570,75 584,75 612,108 612,142 584,112 584,165" />
+      <!-- 裝飾三角 -->
+      <polygon points="596,138 618,112 634,148 596,168" />
+    </g>
+
+    <!-- 右上雙連音符 (♫) -->
+    <g fill="#000000" stroke="#ffffff" stroke-width="6" stroke-linejoin="miter">
+      <!-- 左符頭 -->
+      <polygon points="658,196 680,180 702,192 702,214 680,226 658,214" />
+      <!-- 右符頭 -->
+      <polygon points="716,180 738,164 760,176 760,198 738,210 716,198" />
+      <!-- 符幹與粗黑連槓 -->
+      <polygon points="686,200 686,105 760,78 760,185 744,185 744,115 702,130 702,200" />
+    </g>
+
+    <!-- 【中間聲浪】音頻均衡器 (Equalizer Bars) + 播放鍵 (▶) -->
+    <g fill="#000000">
+      <!-- 起始聲波尖角 -->
+      <polygon points="508,288 530,280 530,292" />
+      <!-- 均衡器柱狀條（隨放射角度遞增與跳動） -->
+      <polygon points="540,275 558,270 558,295 540,293" />
+      <polygon points="568,266 588,260 588,298 568,296" />
+      <polygon points="598,244 618,244 618,302 598,299" />
+      <polygon points="628,262 646,262 646,305 628,303" />
+      <polygon points="656,228 676,228 676,309 656,306" />
+      <polygon points="686,245 704,245 704,312 686,310" />
+      <polygon points="714,258 732,258 732,316 714,313" />
+      <!-- 右側終端播放鍵 (Play Button) -->
+      <polygon points="742,256 778,278 742,302" />
+    </g>
+
+    <!-- 【下方聲浪】斷裂擴音楔形 + 音符 + 播放鍵矩陣 -->
+    <!-- 放射斷裂塊 -->
+    <polygon points="482,308 512,316 506,328" fill="#000000" />
+    <polygon points="520,318 538,324 530,342 514,334" fill="#000000" />
+    <polygon points="546,326 570,334 558,360 538,348" fill="#000000" />
+    <!-- 主擴音三角塊 -->
+    <polygon points="580,336 688,368 658,432 566,368" fill="#000000" />
+    <!-- 外層折角聲浪 -->
+    <polygon points="602,324 718,354 732,448 676,418 700,362" fill="#000000" />
+
+    <!-- 下方獨立播放鍵群 (▶) -->
+    <!-- 喉部旁大播放鍵 -->
+    <polygon points="440,382 528,402 440,456" fill="#000000" stroke="#ffffff" stroke-width="6" />
+    <!-- 右下播放鍵 1 -->
+    <polygon points="742,364 780,386 742,412" fill="#000000" />
+    <!-- 右下播放鍵 2 -->
+    <polygon points="680,436 724,464 680,492" fill="#000000" />
+
+    <!-- 下方音符 (♪)（帶白邊切割背景楔形） -->
+    <g fill="#000000" stroke="#ffffff" stroke-width="7" stroke-linejoin="miter">
+      <polygon points="582,442 604,426 626,438 626,460 604,472 582,460" />
+      <polygon points="610,445 610,352 624,352 652,388 652,422 624,390 624,445" />
+    </g>
+  </g>
+</svg>

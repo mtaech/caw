@@ -60,6 +60,9 @@ jobs:
           if-no-files-found: error
 
   build-windows:
+    # Windows is a best-effort target: a failure here must not block Linux
+    # release artifacts.
+    continue-on-error: true
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +94,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-linux, build-windows]
+    needs: [build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -4,8 +4,9 @@ use gpui_kit::base::{StyledExt as _, h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::dialog::DialogButtonProps;
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, WindowExt};
-use gpui_kit::prelude::{FluentBuilder as _, StatefulInteractiveElement as _};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
@@ -89,7 +90,7 @@ pub(super) fn render_queue_drawer(
             div()
                 .id("queue-scroll")
                 .flex_1()
-                .overflow_y_scroll()
+                .overflow_y_scrollbar()
                 .p_2()
                 .child(
                     v_flex()

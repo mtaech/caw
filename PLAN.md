@@ -340,3 +340,15 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 代码：`PlayerApp::pick_music_folder` 在 GPUI 协程里 await 对话框，选中后
   `add_music_dir` → 重新扫描；取消则无操作。
 - 依赖：`rfd = "0.17"`（默认启用 xdg-portal + pollster，不拉 tokio/async-std）。
+
+### 滚动条可见性修复（2026-10-21）
+
+- 根因：内容区和队列抽屉只用了 `overflow_y_scroll()`（纯裁剪 + 滚轮），没有挂
+  gpui-component 的 `Scrollbar` 组件，因此永远看不到滚动条；主题默认 `ScrollbarMode::Scrolling`
+  也只在滚动瞬间短暂显示。
+- 修复：
+  1. 内容区与队列抽屉改用 `ScrollableElement::overflow_y_scrollbar()`（保留滚动容器本身，
+     叠加 `Scrollbar` 覆盖层并自动 `track_scroll`）；
+  2. 启动时设置 `Theme::set_scrollbar_mode(ScrollbarMode::Always, cx)`，滚动条常驻，
+     侧栏列表/下拉列表/对话框等所有使用组件滚动条的区域一并受益。
+- 验证：设置页、全部音乐均可看到右侧滚动条（截图），滚轮仍正常；`cargo check/clippy/fmt/test` 全绿。

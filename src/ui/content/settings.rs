@@ -117,7 +117,7 @@ pub(super) fn render_settings(
                 .bg(theme.secondary)
                 .child(section(
                     "行为",
-                    "关闭窗口时最小化到后台（托盘将在后续版本提供），或直接退出",
+                    "关闭窗口时最小化到系统托盘（从托盘图标恢复窗口），或直接退出",
                 ))
                 .child(
                     h_flex()

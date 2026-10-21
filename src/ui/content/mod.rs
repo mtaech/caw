@@ -10,6 +10,7 @@ mod tracks;
 
 use gpui_kit::base::h_flex;
 use gpui_kit::component::ActiveTheme;
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -41,7 +42,7 @@ pub fn render_content(
                         .id("content-scroll")
                         .flex_1()
                         .size_full()
-                        .overflow_y_scroll()
+                        .overflow_y_scrollbar()
                         .p_6()
                         .child(match app.selected_nav {
                             NavItem::AllMusic => {

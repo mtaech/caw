@@ -14,7 +14,8 @@ mod ui;
 
 use std::time::Duration;
 
-use gpui_kit::component::{ActiveTheme, Root, TitleBar};
+use gpui_kit::component::scroll::ScrollbarMode;
+use gpui_kit::component::{ActiveTheme, Root, Theme, TitleBar};
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
@@ -32,6 +33,9 @@ fn main() {
 
             // Apply persisted theme mode and fonts before the first frame.
             config::AppConfig::load().apply_theme(cx);
+            // Scrollbars stay visible instead of fading out after scrolling, so every
+            // scrollable region reads as scrollable at a glance.
+            Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);
 
             let window_bounds = platform::window_state::load()
                 .map(|state| state.to_window_bounds())

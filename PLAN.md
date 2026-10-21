@@ -534,3 +534,12 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   dev-setup 安装的 desktop 文件也从 `cn.cyber-nest.caw.desktop` 改为 `caw.desktop`（与 app_id 一致）。
 - 应用内：标题栏与侧栏 logo 改用 `CawIcon::App`（`assets/icons/caw.svg`），放在白色圆角底板上
   保证深浅主题下都清晰。
+
+### 0.5.1：应用内改用简化图标（2026-10-21）
+
+- 详细插画（800x600 黑胶+几何图形）在 16–24px 的标题栏/侧栏里会糊成一团，
+  因此新增 `assets/icons/caw-mark.svg`：极简黑胶唱片（外圈 + 两道纹路 + 白色中心孔），
+  16/24px 下依然清晰；标题栏与侧栏 logo 改用它，仍放在白色圆角底板上。
+- 托盘 `icon-pixmap` 也改用 `caw-mark.png`（256px 透明底）生成，小尺寸更清楚；
+  桌面/任务栏/安装包图标继续使用详细的 `caw.svg`/`caw.png`。
+- 版本号升到 **0.5.1**（About 同步）。

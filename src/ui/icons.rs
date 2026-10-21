@@ -31,7 +31,7 @@ pub enum CawIcon {
 impl IconNamed for CawIcon {
     fn path(self) -> SharedString {
         match self {
-            Self::App => "icons/caw.svg".into(),
+            Self::App => "icons/caw-mark.svg".into(),
             Self::Music => "icons/music.svg".into(),
             Self::Disc => "icons/disc-3.svg".into(),
             Self::ListMusic => "icons/list-music.svg".into(),

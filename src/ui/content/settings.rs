@@ -275,7 +275,7 @@ pub(super) fn render_settings(
                             div()
                                 .text_xs()
                                 .text_color(theme.muted_foreground)
-                                .child("版本: v0.5.0"),
+                                .child("版本: v0.5.1"),
                         )
                         .child(
                             div()

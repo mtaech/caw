@@ -143,7 +143,7 @@ fn register(connection: &Connection, watcher: &str, item_service: &str) -> zbus:
 }
 
 fn icon_pixmaps() -> IconPixmap {
-    const ICON_PNG: &[u8] = include_bytes!("../../assets/icons/caw.png");
+    const ICON_PNG: &[u8] = include_bytes!("../../assets/icons/caw-mark.png");
     let Ok(source) = image::load_from_memory(ICON_PNG) else {
         return Vec::new();
     };

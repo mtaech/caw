@@ -331,3 +331,12 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   以当前列表为队列并跳到该行播放；单击仍只选中。
 - **正在播放高亮**：当前行改为 `primary` 14% 透明底色 + 2px 左侧强调条 + 主色标题，
   暂停时仍保持高亮（当前曲目而非仅“播放中”）。
+
+### 音乐文件夹改用系统原生选择器（rfd，2026-10-21）
+
+- 之前决策 5（不用 rfd、用应用内路径输入）已取消：设置页“添加文件夹…”改为
+  `rfd::AsyncFileDialog::pick_folder()`，Linux 走 xdg-desktop-portal（KDE 原生对话框），
+  不引入 GTK 主循环；在其他平台使用系统原生对话框。
+- 代码：`PlayerApp::pick_music_folder` 在 GPUI 协程里 await 对话框，选中后
+  `add_music_dir` → 重新扫描；取消则无操作。
+- 依赖：`rfd = "0.17"`（默认启用 xdg-portal + pollster，不拉 tokio/async-std）。

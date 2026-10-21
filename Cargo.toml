@@ -29,11 +29,13 @@ open = "5"
 rust-embed = "8"
 smol = "2"
 
-# Linux platform integration (MPRIS / desktop media keys).
-# zbus 5 is already in the lockfile transitively; the direct dependency lets us
-# expose org.mpris.MediaPlayer2 without pulling GPUI types into the platform code.
-# NOTE: the tray (ksni 0.3.7) is deferred because it does not compile against
-# zbus 5.19; see PLAN.md.
+# Native folder picker. On Linux this uses the xdg-desktop-portal (via zbus/ashpd)
+# instead of linking GTK, so it never starts a second GUI toolkit in the process.
+rfd = "0.17"
+
+# Linux platform integration: MPRIS and the system tray (StatusNotifierItem +
+# com.canonical.dbusmenu) are implemented directly on zbus. `ksni` is NOT used:
+# 0.3.7 does not compile against zbus 5.19 (see PLAN.md).
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", features = ["blocking-api"] }
 

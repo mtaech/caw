@@ -964,6 +964,25 @@ impl PlayerApp {
 
     // ── Music Folders Management ──
 
+    /// Open the native folder picker (xdg-desktop-portal on Linux) and add the result.
+    pub fn pick_music_folder(&mut self, cx: &mut Context<Self>) {
+        crate::log_debug!("folder picker: opening native dialog");
+        cx.spawn(async move |entity, cx| {
+            let folder = rfd::AsyncFileDialog::new()
+                .set_title("选择音乐文件夹")
+                .pick_folder()
+                .await;
+            let Some(folder) = folder else {
+                crate::log_debug!("folder picker: cancelled or unavailable");
+                return;
+            };
+            let path = folder.path().to_path_buf();
+            crate::log_debug!("folder picker: chosen {:?}", path);
+            let _ = entity.update(cx, |app, cx| app.add_music_dir(path, cx));
+        })
+        .detach();
+    }
+
     pub fn add_music_dir(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         if !self.music_dirs.contains(&path) {
             let _ = self.db.add_music_dir(&path);

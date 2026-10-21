@@ -1,13 +1,9 @@
 //! Settings view: appearance, playback behavior, music directories and about.
 
-use std::path::PathBuf;
-
 use gpui_kit::base::{StyledExt as _, h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::combobox::Combobox;
-use gpui_kit::component::dialog::DialogButtonProps;
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::{ActiveTheme, Icon, Sizable, ThemeMode, WindowExt};
+use gpui_kit::component::{ActiveTheme, Icon, Sizable, ThemeMode};
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
@@ -216,8 +212,8 @@ pub(super) fn render_settings(
                                 .small()
                                 .icon(CawIcon::Plus)
                                 .label("添加文件夹…")
-                                .on_click(move |_, window, cx| {
-                                    open_add_music_dir_dialog(window, cx, ent.clone());
+                                .on_click(move |_, _, cx| {
+                                    ent.update(cx, |this, cx| this.pick_music_folder(cx));
                                 })
                         })
                         .child({
@@ -274,54 +270,4 @@ pub(super) fn render_settings(
                         ),
                 ),
         )
-}
-
-/// Ask for a directory with an in-app text dialog (no GTK/rfd dependency).
-fn open_add_music_dir_dialog(window: &mut Window, cx: &mut App, entity: Entity<PlayerApp>) {
-    let input = cx.new(|cx| {
-        InputState::new(window, cx)
-            .placeholder("/home/user/Music")
-            .clean_on_escape()
-    });
-
-    window.open_dialog(cx, move |dialog, _, _| {
-        let input = input.clone();
-        let entity = entity.clone();
-        dialog
-            .title("添加音乐文件夹")
-            .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme_muted_placeholder())
-                            .child("输入音乐目录的绝对路径，例如 /home/user/Music"),
-                    )
-                    .child(Input::new(&input).cleanable(true)),
-            )
-            .button_props(
-                DialogButtonProps::default()
-                    .ok_text("添加")
-                    .cancel_text("取消")
-                    .show_cancel(true),
-            )
-            .on_ok(move |_, _, cx| {
-                let raw = input.read(cx).value().trim().to_string();
-                if raw.is_empty() {
-                    return false;
-                }
-                let path = PathBuf::from(raw);
-                if !path.is_absolute() || !path.is_dir() {
-                    return false;
-                }
-                entity.update(cx, |app, cx| app.add_music_dir(path, cx));
-                true
-            })
-    });
-}
-
-/// Fallback color for the dialog hint (the dialog closure runs outside the theme borrow).
-fn theme_muted_placeholder() -> Hsla {
-    hsla(0.0, 0.0, 0.45, 1.0)
 }

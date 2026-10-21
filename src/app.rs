@@ -22,6 +22,12 @@ use crate::ui::fonts::{FontItem, system_font_items};
 /// Minimum interval between config.json writes (see `PlayerApp::flush_config`).
 const CONFIG_SAVE_THROTTLE: Duration = Duration::from_millis(750);
 
+/// Height of one row in the shared track table, in logical pixels.
+///
+/// The "locate now playing" action converts a row index into a scroll offset,
+/// so rows must keep this fixed height.
+pub const LIST_ROW_HEIGHT: f32 = 38.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NavItem {
     AllMusic,
@@ -49,6 +55,8 @@ pub struct PlayerApp {
     pub search_query: String,
     /// Search input entity.
     pub search_input: Entity<InputState>,
+    /// Scroll handle of the content area, used by "locate now playing".
+    pub content_scroll_handle: ScrollHandle,
 
     /// Currently active sidebar nav item.
     pub selected_nav: NavItem,
@@ -241,6 +249,7 @@ impl PlayerApp {
             filtered_indices: Vec::new(),
             search_query: String::new(),
             search_input,
+            content_scroll_handle: ScrollHandle::new(),
             selected_nav: NavItem::AllMusic,
             detail_target: None,
             selected_track_id: None,
@@ -359,6 +368,141 @@ impl PlayerApp {
     pub fn back_to_list(&mut self, cx: &mut Context<Self>) {
         self.detail_target = None;
         cx.notify();
+    }
+
+    /// Scroll the current view so the now-playing track is visible.
+    ///
+    /// If the active view cannot show the track (artist/album/folder grid,
+    /// playlists list, settings), navigate to a view that can first. The search
+    /// filter is cleared when it hides the current track.
+    pub fn locate_now_playing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(current) = self.current_track.clone() else {
+            return;
+        };
+
+        if self.detail_target.is_none() {
+            match self.selected_nav {
+                NavItem::AllMusic => {}
+                NavItem::Artists => {
+                    self.detail_target =
+                        Some(DetailTarget::Artist(current.display_artist().to_string()));
+                }
+                NavItem::Albums => {
+                    self.detail_target =
+                        Some(DetailTarget::Album(current.display_album().to_string()));
+                }
+                NavItem::Folders => {
+                    if let Some(parent) = current.path.parent() {
+                        self.detail_target = Some(DetailTarget::Folder(parent.to_path_buf()));
+                    }
+                }
+                NavItem::Playlists | NavItem::Settings => {
+                    self.selected_nav = NavItem::AllMusic;
+                }
+            }
+        }
+
+        // A search filter may hide the track; clear it so the row exists.
+        if matches!(self.selected_nav, NavItem::AllMusic)
+            && self.detail_target.is_none()
+            && !self
+                .filtered_indices
+                .iter()
+                .any(|&i| self.library.get(i).map(|track| track.id) == Some(current.id))
+        {
+            self.search_query.clear();
+            self.search_input.update(cx, |input, cx| {
+                input.set_value("", window, cx);
+            });
+            self.apply_filter();
+        }
+
+        let Some(row) = self.visible_row_of(current.id) else {
+            crate::log_debug!("locate: now-playing track is not in the active view");
+            return;
+        };
+
+        // Leave one and a half rows above the target so it does not sit flush
+        // against the top edge. The offset is clamped by gpui during prepaint.
+        let top = row as f32 * LIST_ROW_HEIGHT;
+        let offset = (top - LIST_ROW_HEIGHT * 1.5).max(0.0);
+        crate::log_debug!(
+            "locate: track '{}' at row {}, scroll offset {:.0}px",
+            current.display_title(),
+            row,
+            offset
+        );
+        self.content_scroll_handle
+            .set_offset(point(px(0.), px(-offset)));
+        cx.notify();
+    }
+
+    /// Row index of `track_id` in the list rendered by the active view.
+    fn visible_row_of(&self, track_id: u64) -> Option<usize> {
+        let current_path = self.current_track.as_ref().map(|track| track.path.clone());
+        match (&self.selected_nav, &self.detail_target) {
+            (NavItem::AllMusic, _) => self
+                .filtered_indices
+                .iter()
+                .position(|&i| self.library.get(i).map(|track| track.id) == Some(track_id)),
+            (NavItem::Artists, Some(DetailTarget::Artist(name))) => self
+                .library
+                .iter()
+                .filter(|track| track.display_artist() == name)
+                .position(|track| track.id == track_id),
+            (NavItem::Albums, Some(DetailTarget::Album(name))) => {
+                let mut indices: Vec<usize> = self
+                    .library
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, track)| track.display_album() == name)
+                    .map(|(index, _)| index)
+                    .collect();
+                indices.sort_by_key(|&index| self.library[index].track_number);
+                indices
+                    .iter()
+                    .position(|&index| self.library.get(index).map(|t| t.id) == Some(track_id))
+            }
+            (NavItem::Playlists, Some(DetailTarget::Playlist(playlist_id))) => {
+                let playlist = self.db.get_playlist(*playlist_id)?;
+                let ids: std::collections::HashSet<i64> = playlist.track_ids.into_iter().collect();
+                self.library
+                    .iter()
+                    .filter(|track| ids.contains(&(track.id as i64)))
+                    .position(|track| track.id == track_id)
+            }
+            (NavItem::Folders, Some(DetailTarget::Folder(dir))) => {
+                // Matches the folder view: subdirectories first, then audio
+                // files, each group sorted by path.
+                let entries: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+                    .ok()?
+                    .filter_map(|entry| entry.ok())
+                    .map(|entry| entry.path())
+                    .collect();
+                let subdirs = entries.iter().filter(|path| path.is_dir()).count();
+                let mut files: Vec<&std::path::PathBuf> = entries
+                    .iter()
+                    .filter(|path| path.is_file())
+                    .filter(|path| {
+                        path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| {
+                                matches!(
+                                    ext.to_lowercase().as_str(),
+                                    "flac" | "mp3" | "wav" | "ogg" | "m4a" | "aac"
+                                )
+                            })
+                            .unwrap_or(false)
+                    })
+                    .collect();
+                files.sort();
+                files
+                    .iter()
+                    .position(|path| current_path.as_deref() == Some(path.as_path()))
+                    .map(|index| subdirs + index)
+            }
+            _ => None,
+        }
     }
 
     /// Play a track directly, creating a queue from surrounding tracks.

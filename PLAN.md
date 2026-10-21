@@ -362,3 +362,15 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   未选中用 `outline()`，并额外 `.selected(true/false)` 提供状态样式；播放栏的模式/队列按钮
   同步加 `.selected(...)`（保留 `.toggled` 供读屏器）。
 - 配置读写本身正常（`set_close_to_tray` → `config.json` → 关闭钩子读取），只是此前没有视觉反馈。
+
+### 播放栏“定位到正在播放”（2026-10-21）
+
+- 播放栏右侧新增十字准星按钮（`assets/icons/locate.svg`，`CawIcon::Locate`），
+  点击后把当前视图滚动到正在播放的曲目并保留其高亮；无当前曲目时按钮禁用。
+- 实现：`PlayerApp.content_scroll_handle`（`ScrollHandle`）由内容区 `track_scroll` +
+  `vertical_scrollbar` 共享；`locate_now_playing(window, cx)` 计算当前视图里当前曲目的行号，
+  `set_offset` 到 `row * LIST_ROW_HEIGHT - 1.5 行`（GPUI 在 prepaint 里会 clamp）。
+- 曲目表行高固定为 `LIST_ROW_HEIGHT = 38px`，否则像素定位会漂移。
+- 视图自适应：艺术家/专辑网格 → 打开当前曲目的详情；文件夹 → 打开所在目录；
+  播放列表列表/设置 → 回到“全部音乐”；搜索过滤把当前曲目隐藏时会自动清空搜索。
+- 实测：日志 `locate: track ... at row 19, scroll offset 665px`，截图确认第 20 行高亮并滚入视野。

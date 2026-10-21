@@ -3,7 +3,7 @@
 use gpui_kit::base::{h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::slider::{Slider, SliderState};
-use gpui_kit::component::{ActiveTheme, Icon, Selectable, Sizable};
+use gpui_kit::component::{ActiveTheme, Disableable as _, Icon, Selectable, Sizable};
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
@@ -16,6 +16,8 @@ use crate::ui::marquee::MarqueeText;
 const PLAYER_BAR_HEIGHT: Pixels = px(80.);
 /// Width of the fixed left (now playing) and right (volume/queue) clusters.
 const SIDE_CLUSTER_WIDTH: Pixels = px(280.);
+/// The right cluster also hosts locate + queue buttons, so it is wider.
+const RIGHT_CLUSTER_WIDTH: Pixels = px(324.);
 /// Space left for the title inside the left cluster (cover + gap subtracted).
 const TITLE_WIDTH: Pixels = px(216.);
 
@@ -205,11 +207,26 @@ pub fn render_player_bar(
         // ── Right: queue + volume ──
         .child(
             h_flex()
-                .w(SIDE_CLUSTER_WIDTH)
+                .w(RIGHT_CLUSTER_WIDTH)
                 .flex_shrink_0()
                 .items_center()
                 .justify_end()
                 .gap_3()
+                .child({
+                    let ent = entity.clone();
+                    let has_track = app.current_track.is_some();
+                    Button::new("btn-locate-now-playing")
+                        .ghost()
+                        .small()
+                        .icon(CawIcon::Locate)
+                        .tooltip("定位到正在播放")
+                        .disabled(!has_track)
+                        .on_click(move |_, window, cx| {
+                            ent.update(cx, |this, cx| {
+                                this.locate_now_playing(window, cx);
+                            });
+                        })
+                })
                 .child({
                     let ent = entity.clone();
                     let show_queue = app.show_queue;

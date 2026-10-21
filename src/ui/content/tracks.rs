@@ -157,8 +157,9 @@ pub(super) fn render_tracks_table(
         .child(
             h_flex()
                 .w_full()
+                .h(px(crate::app::LIST_ROW_HEIGHT))
                 .px_3()
-                .py_2()
+                .items_center()
                 .text_xs()
                 .font_medium()
                 .text_color(cx.theme().muted_foreground)
@@ -189,8 +190,8 @@ pub(super) fn render_tracks_table(
 
                     h_flex()
                         .w_full()
+                        .h(px(crate::app::LIST_ROW_HEIGHT))
                         .px_3()
-                        .py_2()
                         .rounded_md()
                         .items_center()
                         .cursor_pointer()

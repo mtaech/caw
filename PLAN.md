@@ -566,3 +566,5 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - `scripts/package.sh` 改用 `install -m 0755`（可执行文件）/ `install -m 0644`（desktop、
   图标、文档）落盘，不再依赖 checkout 里的文件权限；deb 的 control 同时写入
   `Installed-Size`（按 staging 目录计算）。
+- 每次打包为 deb / tarball / AppImage 统一生成同名 `.sha256`，方便发布校验。
+- 本机没有 `rpmbuild`，`.rpm` 由 CI（`.github/workflows/build-rpm.yml`）产出。

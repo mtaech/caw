@@ -214,6 +214,18 @@ if want deb; then if build_deb; then built=$((built + 1)); else failed="$failed 
 if want rpm; then if build_rpm; then built=$((built + 1)); else failed="$failed rpm"; fi; fi
 if want appimage; then if build_appimage; then built=$((built + 1)); else failed="$failed appimage"; fi; fi
 
+# Checksums for every artifact this run produced (the tarball already has one from
+# build_tarball; rewriting it keeps all three in the same format).
+say "Writing checksums"
+for artifact in \
+  "caw_${VERSION}_${DEB_ARCH}.deb" \
+  "caw-${VERSION}-linux-${RPM_ARCH}.tar.gz" \
+  "Caw-${VERSION}-${APPIMAGE_ARCH}.AppImage"; do
+  if [ -f "$DIST/$artifact" ]; then
+    (cd "$DIST" && sha256sum "$artifact" > "$artifact.sha256")
+  fi
+done
+
 echo
 say "Artifacts in $DIST:"
 ls -1 "$DIST" | grep -E "\.(deb|rpm|AppImage|tar\.gz|sha256)$" || true

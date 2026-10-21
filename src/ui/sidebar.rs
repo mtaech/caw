@@ -39,15 +39,13 @@ pub fn render_sidebar(
                         .size_7()
                         .flex_shrink_0()
                         .rounded_md()
-                        .bg(cx.theme().primary)
+                        .bg(rgb(0xffffff))
+                        .border_1()
+                        .border_color(cx.theme().border)
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child(
-                            Icon::new(CawIcon::Music)
-                                .size_4()
-                                .text_color(cx.theme().primary_foreground),
-                        ),
+                        .child(Icon::new(CawIcon::App).size_5()),
                 )
                 .child(
                     v_flex()
@@ -74,7 +72,7 @@ pub fn render_sidebar(
                 SidebarMenu::new()
                     .child(nav_item(
                         "全部音乐",
-                        CawIcon::Music,
+                        CawIcon::App,
                         NavItem::AllMusic,
                         selected_nav,
                         &entity,

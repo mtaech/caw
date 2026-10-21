@@ -4,6 +4,7 @@ use gpui_kit::*;
 /// Application icons: a mix of gpui-kit bundled Lucide icons and Caw own SVGs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CawIcon {
+    App,
     Music,
     Disc,
     ListMusic,
@@ -30,6 +31,7 @@ pub enum CawIcon {
 impl IconNamed for CawIcon {
     fn path(self) -> SharedString {
         match self {
+            Self::App => "icons/caw.svg".into(),
             Self::Music => "icons/music.svg".into(),
             Self::Disc => "icons/disc-3.svg".into(),
             Self::ListMusic => "icons/list-music.svg".into(),

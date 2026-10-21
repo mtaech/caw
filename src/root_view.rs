@@ -75,9 +75,14 @@ impl Render for PlayerApp {
                                     .items_center()
                                     .gap_2()
                                     .child(
-                                        Icon::new(CawIcon::Music)
-                                            .size_4()
-                                            .text_color(cx.theme().primary),
+                                        div()
+                                            .size_5()
+                                            .rounded_sm()
+                                            .bg(rgb(0xffffff))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(Icon::new(CawIcon::App).size_4()),
                                     )
                                     .child(
                                         div()

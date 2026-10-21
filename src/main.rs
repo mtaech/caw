@@ -40,11 +40,18 @@ fn main() {
             let window_bounds = platform::window_state::load()
                 .map(|state| state.to_window_bounds())
                 .unwrap_or_else(|| WindowBounds::centered(size(px(1080.), px(720.)), cx));
-            let window_options = WindowOptions {
+            let mut window_options = WindowOptions {
                 window_bounds: Some(window_bounds),
                 window_min_size: Some(size(px(860.), px(540.))),
+                // Wayland app_id / X11 WM_CLASS: compositors use it to match the
+                // .desktop entry, which is where the taskbar/dock icon comes from.
+                app_id: Some("caw".to_owned()),
                 ..TitleBar::window_options()
             };
+            window_options.titlebar = Some(TitlebarOptions {
+                title: Some("Caw".into()),
+                ..TitleBar::title_bar_options()
+            });
             let root_background = cx.theme().background;
 
             cx.open_window(window_options, |window, cx| {

@@ -524,3 +524,13 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 修复 Windows 编译：`platform::set_taskbar_visible()` 包装 KWin 专用调用，非 Linux 为 no-op；
   CI 中 Windows job 标记 `continue-on-error`，Release 只依赖 Linux job，避免 Windows 失败
   阻断 Linux 产物发布。
+
+### 应用图标在窗口/任务栏/应用内生效（2026-10-21）
+
+- 托盘：使用内嵌 PNG 生成的 `icon-pixmap`（透明底，24/32/48/64），`icon-name` 置空，
+  不再出现白色方块或“?”占位。
+- 窗口/任务栏：`WindowOptions.app_id = "caw"` + `titlebar.title = "Caw"`，KWin 查询确认
+  `desktopFileName=caw`、`caption=Caw`，compositor 因此能匹配 `caw.desktop` 并使用新图标；
+  dev-setup 安装的 desktop 文件也从 `cn.cyber-nest.caw.desktop` 改为 `caw.desktop`（与 app_id 一致）。
+- 应用内：标题栏与侧栏 logo 改用 `CawIcon::App`（`assets/icons/caw.svg`），放在白色圆角底板上
+  保证深浅主题下都清晰。

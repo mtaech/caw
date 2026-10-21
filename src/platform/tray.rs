@@ -32,6 +32,13 @@ const MENU_PREVIOUS: i32 = 4;
 const MENU_SEPARATOR: i32 = 5;
 const MENU_QUIT: i32 = 6;
 
+type IconPixmap = Vec<(i32, i32, Vec<u8>)>;
+type ToolTip = (String, IconPixmap, String, String);
+type MenuProps = HashMap<String, OwnedValue>;
+type MenuChildren = Vec<Value<'static>>;
+type MenuLayoutNode = (i32, MenuProps, MenuChildren);
+type MenuLayout = (u32, MenuLayoutNode);
+
 /// Spawn the tray thread. Any failure is logged, never propagated.
 pub(crate) fn spawn(shared: Arc<Shared>) {
     let spawned = std::thread::Builder::new()
@@ -95,7 +102,7 @@ fn register(connection: &Connection, watcher: &str, item_service: &str) -> zbus:
 
 // -- Menu layout helpers ---------------------------------------------------------
 
-fn menu_props(label: &str, enabled: bool) -> HashMap<String, OwnedValue> {
+fn menu_props(label: &str, enabled: bool) -> MenuProps {
     let mut props = HashMap::new();
     props.insert("label".to_owned(), OwnedValue::from(Str::from(label)));
     props.insert("enabled".to_owned(), OwnedValue::from(enabled));
@@ -103,18 +110,14 @@ fn menu_props(label: &str, enabled: bool) -> HashMap<String, OwnedValue> {
     props
 }
 
-fn separator_props() -> HashMap<String, OwnedValue> {
+fn separator_props() -> MenuProps {
     let mut props = HashMap::new();
     props.insert("type".to_owned(), OwnedValue::from(Str::from("separator")));
     props.insert("visible".to_owned(), OwnedValue::from(true));
     props
 }
 
-fn layout_node(
-    id: i32,
-    props: HashMap<String, OwnedValue>,
-    children: Vec<Value<'static>>,
-) -> Value<'static> {
+fn layout_node(id: i32, props: MenuProps, children: MenuChildren) -> Value<'static> {
     let structure = StructureBuilder::new()
         .append_field(Value::from(id))
         .append_field(Value::from(props))
@@ -124,7 +127,7 @@ fn layout_node(
     Value::Structure(structure)
 }
 
-fn children(snapshot: &NowPlaying) -> Vec<Value<'static>> {
+fn children(snapshot: &NowPlaying) -> MenuChildren {
     let play_label = if snapshot.playback_state == PlaybackState::Playing {
         "暂停"
     } else {
@@ -188,7 +191,7 @@ impl StatusNotifierItem {
     }
 
     #[zbus(property(emits_changed_signal = "const"))]
-    fn icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
+    fn icon_pixmap(&self) -> IconPixmap {
         Vec::new()
     }
 
@@ -203,7 +206,7 @@ impl StatusNotifierItem {
     }
 
     #[zbus(property(emits_changed_signal = "const"))]
-    fn attention_icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
+    fn attention_icon_pixmap(&self) -> IconPixmap {
         Vec::new()
     }
 
@@ -213,7 +216,7 @@ impl StatusNotifierItem {
     }
 
     #[zbus(property(emits_changed_signal = "false"))]
-    fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
+    fn tool_tip(&self) -> ToolTip {
         let snapshot = self.shared.read();
         let subtitle = if snapshot.title.is_empty() {
             "本地音乐播放器".to_owned()
@@ -288,7 +291,7 @@ impl DbusMenu {
         _parent_id: i32,
         _recursion_depth: i32,
         _property_names: Vec<String>,
-    ) -> (u32, (i32, HashMap<String, OwnedValue>, Vec<Value<'static>>)) {
+    ) -> MenuLayout {
         let snapshot = self.shared.read();
         let mut root_props = HashMap::new();
         root_props.insert(
@@ -302,7 +305,7 @@ impl DbusMenu {
         &self,
         ids: Vec<i32>,
         _property_names: Vec<String>,
-    ) -> Vec<(i32, HashMap<String, OwnedValue>)> {
+    ) -> Vec<(i32, MenuProps)> {
         let snapshot = self.shared.read();
         let all = all_props(&snapshot);
         ids.into_iter()
@@ -344,7 +347,7 @@ impl DbusMenu {
     }
 }
 
-fn all_props(snapshot: &NowPlaying) -> HashMap<i32, HashMap<String, OwnedValue>> {
+fn all_props(snapshot: &NowPlaying) -> HashMap<i32, MenuProps> {
     let huge_label = if snapshot.playback_state == PlaybackState::Playing {
         "暂停"
     } else {

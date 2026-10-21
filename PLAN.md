@@ -352,3 +352,13 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   2. 启动时设置 `Theme::set_scrollbar_mode(ScrollbarMode::Always, cx)`，滚动条常驻，
      侧栏列表/下拉列表/对话框等所有使用组件滚动条的区域一并受益。
 - 验证：设置页、全部音乐均可看到右侧滚动条（截图），滚轮仍正常；`cargo check/clippy/fmt/test` 全绿。
+
+### 设置选项选中态不显示（2026-10-21）
+
+- 根因：`Button::toggled(bool)` 在 gpui-component 0.7 里**只设置无障碍 aria-toggled**，
+  不绘制选中样式（源码：`toggled` 仅写入 `aria_toggled`）；视觉选中要走 `Selectable::selected`
+  或换变体。因此“亮色/暗色”“直接退出/最小化到托盘”点击后看起来没反应。
+- 修复：设置页新增 `choice_button(id, label, active)` 帮助函数——选中项用 `primary()`（实心），
+  未选中用 `outline()`，并额外 `.selected(true/false)` 提供状态样式；播放栏的模式/队列按钮
+  同步加 `.selected(...)`（保留 `.toggled` 供读屏器）。
+- 配置读写本身正常（`set_close_to_tray` → `config.json` → 关闭钩子读取），只是此前没有视觉反馈。

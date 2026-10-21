@@ -3,11 +3,32 @@
 use gpui_kit::base::{StyledExt as _, h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::combobox::Combobox;
-use gpui_kit::component::{ActiveTheme, Icon, Sizable, ThemeMode};
+use gpui_kit::component::{ActiveTheme, Icon, Selectable, Sizable, ThemeMode};
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
 use crate::ui::icons::CawIcon;
+
+/// One option in an exclusive choice row.
+///
+/// The active option uses the primary variant (filled), the rest stay outlined.
+/// `Button::toggled` only sets accessible state, it does not paint a selected
+/// background, so selection has to be expressed through the variant as well.
+fn choice_button(id: &'static str, label: &'static str, active: bool) -> Button {
+    if active {
+        Button::new(id)
+            .primary()
+            .small()
+            .label(label)
+            .selected(true)
+    } else {
+        Button::new(id)
+            .outline()
+            .small()
+            .label(label)
+            .selected(false)
+    }
+}
 
 pub(super) fn render_settings(
     app: &PlayerApp,
@@ -61,29 +82,29 @@ pub(super) fn render_settings(
                         .gap_2()
                         .child({
                             let ent = entity.clone();
-                            Button::new("btn-theme-light")
-                                .outline()
-                                .small()
-                                .label("亮色")
-                                .toggled(app.config.theme_mode == ThemeMode::Light)
-                                .on_click(move |_, _, cx| {
-                                    ent.update(cx, |this, cx| {
-                                        this.set_theme_mode(ThemeMode::Light, cx);
-                                    });
-                                })
+                            choice_button(
+                                "btn-theme-light",
+                                "亮色",
+                                app.config.theme_mode == ThemeMode::Light,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_theme_mode(ThemeMode::Light, cx);
+                                });
+                            })
                         })
                         .child({
                             let ent = entity.clone();
-                            Button::new("btn-theme-dark")
-                                .outline()
-                                .small()
-                                .label("暗色")
-                                .toggled(app.config.theme_mode == ThemeMode::Dark)
-                                .on_click(move |_, _, cx| {
-                                    ent.update(cx, |this, cx| {
-                                        this.set_theme_mode(ThemeMode::Dark, cx);
-                                    });
-                                })
+                            choice_button(
+                                "btn-theme-dark",
+                                "暗色",
+                                app.config.theme_mode == ThemeMode::Dark,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_theme_mode(ThemeMode::Dark, cx);
+                                });
+                            })
                         }),
                 )
                 .child(
@@ -124,29 +145,29 @@ pub(super) fn render_settings(
                         .gap_2()
                         .child({
                             let ent = entity.clone();
-                            Button::new("btn-close-quit")
-                                .outline()
-                                .small()
-                                .label("直接退出")
-                                .toggled(!app.config.close_to_tray)
-                                .on_click(move |_, _, cx| {
-                                    ent.update(cx, |this, cx| {
-                                        this.set_close_to_tray(false, cx);
-                                    });
-                                })
+                            choice_button(
+                                "btn-close-quit",
+                                "直接退出",
+                                !app.config.close_to_tray,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_close_to_tray(false, cx);
+                                });
+                            })
                         })
                         .child({
                             let ent = entity.clone();
-                            Button::new("btn-close-tray")
-                                .outline()
-                                .small()
-                                .label("最小化到后台")
-                                .toggled(app.config.close_to_tray)
-                                .on_click(move |_, _, cx| {
-                                    ent.update(cx, |this, cx| {
-                                        this.set_close_to_tray(true, cx);
-                                    });
-                                })
+                            choice_button(
+                                "btn-close-tray",
+                                "最小化到托盘",
+                                app.config.close_to_tray,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_close_to_tray(true, cx);
+                                });
+                            })
                         }),
                 ),
         )

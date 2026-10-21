@@ -3,7 +3,7 @@
 use gpui_kit::base::{h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::slider::{Slider, SliderState};
-use gpui_kit::component::{ActiveTheme, Icon, Sizable};
+use gpui_kit::component::{ActiveTheme, Icon, Selectable, Sizable};
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
@@ -120,6 +120,7 @@ pub fn render_player_bar(
                             Button::new("btn-playback-mode")
                                 .ghost()
                                 .small()
+                                .selected(mode != PlaybackMode::Sequence)
                                 .toggled(mode != PlaybackMode::Sequence)
                                 .icon(mode.icon())
                                 .tooltip(format!("{}（点击切换）", mode.label()))
@@ -216,6 +217,7 @@ pub fn render_player_bar(
                     Button::new("btn-toggle-queue")
                         .ghost()
                         .small()
+                        .selected(show_queue)
                         .toggled(show_queue)
                         .icon(CawIcon::ListMusic)
                         .label(if queue_len > 0 {

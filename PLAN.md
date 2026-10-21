@@ -310,3 +310,10 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 修复：`src/ui/content/*.rs` 的视图根节点改为 `.w_full()`（自然高度），滚动容器
   （`.id("content-scroll").overflow_y_scroll()`）即可得到真实内容高度；8 处替换。
 - 验证：重启后窗口可滚动到第 11–28 行（截图确认滚动偏移生效），队列抽屉/设置页同理。
+
+### 设置字体选择改为系统字体下拉搜索（2026-10-21）
+
+- 设置页字体不再硬编码三个按钮，改为可搜索下拉框（gpui-kit `Combobox` + `SearchableVec`）。
+- 字体列表来自 `cx.text_system().all_font_names()`（本机枚举到 534 个 family），去重排序；
+  当前配置字体若不在列表中会补到首位，保证触发器始终显示已选值。
+- 选择后立即 `Theme.font_family` 生效并写入 `config.json`（事件：Change/Confirm）。

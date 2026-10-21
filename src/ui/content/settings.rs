@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use gpui_kit::base::{StyledExt as _, h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::combobox::Combobox;
 use gpui_kit::component::dialog::DialogButtonProps;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, ThemeMode, WindowExt};
@@ -11,8 +12,6 @@ use gpui_kit::*;
 
 use crate::app::PlayerApp;
 use crate::ui::icons::CawIcon;
-
-const FONT_CHOICES: [&str; 3] = ["Noto Sans CJK SC", "Noto Sans", "DejaVu Sans"];
 
 pub(super) fn render_settings(
     app: &PlayerApp,
@@ -98,22 +97,16 @@ pub(super) fn render_settings(
                             div()
                                 .text_xs()
                                 .text_color(theme.muted_foreground)
-                                .child("界面字体"),
+                                .child("界面字体（列出系统全部字体，可搜索）"),
                         )
                         .child(
-                            h_flex().gap_2().children(FONT_CHOICES.map(|font| {
-                                let ent = entity.clone();
-                                Button::new(format!("btn-font-{}", font.replace(' ', "-")))
-                                    .outline()
-                                    .small()
-                                    .label(font)
-                                    .toggled(app.config.font_family == font)
-                                    .on_click(move |_, _, cx| {
-                                        ent.update(cx, |this, cx| {
-                                            this.set_font_family(SharedString::from(font), cx);
-                                        });
-                                    })
-                            })),
+                            div().w(px(320.)).child(
+                                Combobox::new(&app.font_picker)
+                                    .placeholder("选择字体")
+                                    .search_placeholder("搜索字体…")
+                                    .cleanable(false)
+                                    .menu_max_h(px(320.)),
+                            ),
                         ),
                 ),
         )

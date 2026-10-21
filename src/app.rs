@@ -2,9 +2,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use gpui_kit::component::combobox::{ComboboxEvent, ComboboxState};
 use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::searchable_list::SearchableVec;
 use gpui_kit::component::slider::{SliderEvent, SliderState};
-use gpui_kit::component::{Theme, ThemeMode};
+use gpui_kit::component::{IndexPath, Theme, ThemeMode};
 use gpui_kit::*;
 use rand::Rng;
 
@@ -15,6 +17,7 @@ use crate::config::AppConfig;
 use crate::db::{Database, PlaylistRow};
 use crate::models::playlist::{PlaybackMode, PlaybackState};
 use crate::models::track::Track;
+use crate::ui::fonts::{FontItem, system_font_items};
 
 /// Minimum interval between config.json writes (see `PlayerApp::flush_config`).
 const CONFIG_SAVE_THROTTLE: Duration = Duration::from_millis(750);
@@ -101,6 +104,9 @@ pub struct PlayerApp {
     /// Track being added to a playlist (modal open).
     pub add_to_playlist_track: Option<Arc<Track>>,
 
+    /// Searchable picker listing every installed system font family.
+    pub font_picker: Entity<ComboboxState<SearchableVec<FontItem>>>,
+
     /// Persisted user preferences (`~/.config/caw/config.json`).
     pub config: AppConfig,
     /// Focus handle for the root view (global keyboard shortcuts).
@@ -119,6 +125,41 @@ pub struct PlayerApp {
 impl PlayerApp {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let config = AppConfig::load();
+
+        // Enumerate installed fonts once; the settings picker searches this list.
+        let font_items = system_font_items(cx, &config.font_family);
+        crate::log_debug!(
+            "loaded {} system font families (current: {})",
+            font_items.len(),
+            config.font_family
+        );
+        let selected_font_row = font_items
+            .iter()
+            .position(|item| item.family().as_ref() == config.font_family)
+            .unwrap_or(0);
+        let font_picker = cx.new(|cx| {
+            ComboboxState::new(
+                SearchableVec::new(font_items),
+                vec![IndexPath::new(selected_font_row)],
+                window,
+                cx,
+            )
+            .searchable(true)
+        });
+        cx.subscribe(
+            &font_picker,
+            |this, _state, event: &ComboboxEvent<SearchableVec<FontItem>>, cx| {
+                let values = match event {
+                    ComboboxEvent::Change(values) | ComboboxEvent::Confirm(values) => values,
+                };
+                if let Some(family) = values.first().cloned()
+                    && this.config.font_family != family.as_ref()
+                {
+                    this.set_font_family(family, cx);
+                }
+            },
+        )
+        .detach();
 
         let db = Arc::new(Database::open());
         let playlists = db.list_playlists();
@@ -228,6 +269,7 @@ impl PlayerApp {
             show_queue: false,
             create_playlist_input: None,
             add_to_playlist_track: None,
+            font_picker,
             config,
             focus_handle: cx.focus_handle(),
             config_dirty: false,

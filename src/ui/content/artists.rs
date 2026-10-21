@@ -43,6 +43,7 @@ pub(super) fn render_artists(
             .child(
                 h_flex()
                     .w_full()
+                    .h(px(72.))
                     .items_center()
                     .gap_3()
                     .child({

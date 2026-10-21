@@ -53,6 +53,7 @@ pub(super) fn render_all_music(
         .child(
             h_flex()
                 .w_full()
+                .h(px(56.))
                 .items_center()
                 .justify_between()
                 .gap_4()

@@ -81,10 +81,18 @@ pub fn render_player_bar(
                 .child(cover_art(app, cx))
                 .child(
                     v_flex()
+                        .id("now-playing-info")
                         .flex_1()
                         .min_w(px(0.))
                         .overflow_hidden()
                         .gap_0()
+                        .cursor_pointer()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, window, cx| {
+                                this.locate_now_playing(window, cx);
+                            }),
+                        )
                         .child(
                             // Long titles scroll; short ones stay static and
                             // ellipsize. Fixed height keeps the row stable.

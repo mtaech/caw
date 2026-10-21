@@ -28,6 +28,24 @@ const CONFIG_SAVE_THROTTLE: Duration = Duration::from_millis(750);
 /// so rows must keep this fixed height.
 pub const LIST_ROW_HEIGHT: f32 = 38.0;
 
+/// Distance from the top of the content scroll area to the first data row.
+///
+/// These mirror the fixed header heights in the content views (24px content
+/// padding + view header + 16px gap + table header + 4px gap). Keep them in
+/// sync when those layouts change.
+const FIRST_ROW_TOP_ALL_MUSIC: f32 = 138.0;
+const FIRST_ROW_TOP_DETAIL: f32 = 154.0;
+const FIRST_ROW_TOP_FOLDER: f32 = 104.0;
+/// Folder rows are natural-height rows with an 8px gap between them.
+const FOLDER_ROW_PITCH: f32 = 44.0;
+
+/// Where the now-playing row sits inside the content scroll area.
+struct RowMetrics {
+    index: usize,
+    top: f32,
+    pitch: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NavItem {
     AllMusic,
@@ -417,24 +435,66 @@ impl PlayerApp {
             self.apply_filter();
         }
 
-        let Some(row) = self.visible_row_of(current.id) else {
+        let Some(metrics) = self.current_row_metrics() else {
             crate::log_debug!("locate: now-playing track is not in the active view");
             return;
         };
 
         // Leave one and a half rows above the target so it does not sit flush
         // against the top edge. The offset is clamped by gpui during prepaint.
-        let top = row as f32 * LIST_ROW_HEIGHT;
-        let offset = (top - LIST_ROW_HEIGHT * 1.5).max(0.0);
+        let offset = (metrics.top - metrics.pitch * 1.5).max(0.0);
         crate::log_debug!(
             "locate: track '{}' at row {}, scroll offset {:.0}px",
             current.display_title(),
-            row,
+            metrics.index,
             offset
         );
         self.content_scroll_handle
             .set_offset(point(px(0.), px(-offset)));
         cx.notify();
+    }
+
+    /// Whether the now-playing row is currently inside the content viewport.
+    ///
+    /// Returns `true` when the active view has no row for the track (so callers
+    /// do not offer a locate affordance that cannot do anything) or before the
+    /// scroll area has been laid out.
+    pub fn now_playing_row_visible(&self) -> bool {
+        let Some(metrics) = self.current_row_metrics() else {
+            return true;
+        };
+        let bounds = self.content_scroll_handle.bounds();
+        if bounds.size.height <= px(1.0) || bounds.size.width <= px(1.0) {
+            return true;
+        }
+
+        let view_top = -self.content_scroll_handle.offset().y;
+        let view_bottom = view_top + bounds.size.height;
+        let row_top = px(metrics.top);
+        let row_bottom = row_top + px(metrics.pitch);
+
+        row_bottom > view_top + px(2.0) && row_top < view_bottom - px(2.0)
+    }
+
+    /// Geometry of the now-playing row inside the content scroll area.
+    fn current_row_metrics(&self) -> Option<RowMetrics> {
+        let current = self.current_track.as_ref()?;
+        let (top, pitch) = match (&self.selected_nav, &self.detail_target) {
+            (NavItem::AllMusic, _) => (FIRST_ROW_TOP_ALL_MUSIC, LIST_ROW_HEIGHT),
+            (NavItem::Artists | NavItem::Albums | NavItem::Playlists, Some(_)) => {
+                (FIRST_ROW_TOP_DETAIL, LIST_ROW_HEIGHT)
+            }
+            (NavItem::Folders, Some(DetailTarget::Folder(_))) => {
+                (FIRST_ROW_TOP_FOLDER, FOLDER_ROW_PITCH)
+            }
+            _ => return None,
+        };
+        let index = self.visible_row_of(current.id)?;
+        Some(RowMetrics {
+            index,
+            top: top + index as f32 * pitch,
+            pitch,
+        })
     }
 
     /// Row index of `track_id` in the list rendered by the active view.

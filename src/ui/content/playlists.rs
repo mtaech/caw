@@ -47,6 +47,7 @@ pub(super) fn render_playlists(
                 .child(
                     h_flex()
                         .w_full()
+                        .h(px(72.))
                         .items_center()
                         .gap_4()
                         .child({

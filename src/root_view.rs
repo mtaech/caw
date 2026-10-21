@@ -23,6 +23,11 @@ impl Render for PlayerApp {
             .clone()
             .map(|input| build_create_playlist_overlay(entity.clone(), input, cx));
 
+        // Floating shortcut back to the now-playing row, shown only while that
+        // row is scrolled out of view.
+        let floating_locate = (app.current_track.is_some() && !app.now_playing_row_visible())
+            .then(|| build_floating_locate(entity.clone(), cx));
+
         let add_to_playlist_overlay = app.add_to_playlist_track.clone().map(|track| {
             let playlists = app
                 .playlists
@@ -88,9 +93,43 @@ impl Render for PlayerApp {
                     )
                     .child(render_player_bar(app, window, cx)),
             )
+            .children(floating_locate)
             .children(create_playlist_overlay)
             .children(add_to_playlist_overlay)
     }
+}
+
+/// Round floating button that jumps back to the now-playing row.
+fn build_floating_locate(entity: Entity<PlayerApp>, cx: &mut Context<PlayerApp>) -> AnyElement {
+    let background = cx.theme().primary;
+    let foreground = cx.theme().primary_foreground;
+
+    h_flex()
+        .id("floating-locate")
+        .absolute()
+        .right(px(24.))
+        .bottom(px(104.))
+        .items_center()
+        .gap_2()
+        .px_4()
+        .py_2()
+        .rounded_full()
+        .bg(background)
+        .shadow_lg()
+        .cursor_pointer()
+        .hover(|style| style.opacity(0.92))
+        .child(Icon::new(CawIcon::Locate).size_4().text_color(foreground))
+        .child(
+            div()
+                .text_xs()
+                .font_medium()
+                .text_color(foreground)
+                .child("正在播放"),
+        )
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            entity.update(cx, |app, cx| app.locate_now_playing(window, cx));
+        })
+        .into_any_element()
 }
 
 fn handle_shortcut(

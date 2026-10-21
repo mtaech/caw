@@ -38,9 +38,18 @@ say() { printf "==> %s\n" "$*"; }
 skip() { printf "!!! %s\n" "$*" >&2; }
 need() { command -v "$1" >/dev/null 2>&1; }
 
-say "Building release binary (cargo build --release --locked)"
-cargo build --release --locked
+# SKIP_BUILD=1 reuses an existing target/release/caw (used by CI/containers).
+if [ "${SKIP_BUILD:-0}" = "1" ]; then
+  say "Reusing existing release binary (SKIP_BUILD=1)"
+else
+  say "Building release binary (cargo build --release --locked)"
+  cargo build --release --locked
+fi
 BIN="$ROOT/target/release/caw"
+if [ ! -x "$BIN" ]; then
+  echo "release binary not found: $BIN (run without SKIP_BUILD)" >&2
+  exit 1
+fi
 
 say "Staging package tree"
 # Keep previously built artifacts (dist/*.deb etc.); only reset staging dirs.

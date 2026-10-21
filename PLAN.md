@@ -402,3 +402,11 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   `./scripts/package.sh all`，`dist/*` 全部上传并在 tag 时附加到 Release。
 - 本地验证：deb（12MB，control/文件清单正确）、AppImage（17MB，可解包）、tar.gz 均构建成功；
   本机未安装 rpm-build，rpm 由 CI 覆盖。
+
+### 打包验证补充（2026-10-21）
+
+- `SKIP_BUILD=1` 支持复用已编译的 `target/release/caw`（容器/CI 复用构建产物）。
+- 在 `fedora:latest` 容器内用 `rpm-build` 实测成功：`caw-0.4.0-1.x86_64.rpm`（13MB），
+  `rpm -qip/-qlp` 元数据与文件清单正确（/usr/bin/caw、desktop、图标）。
+- `.deb`（12MB）元数据与清单正确；`.AppImage`（17MB）实测可启动（MPRIS/托盘/扫描均正常）；
+  `tar.gz` + sha256 正常。

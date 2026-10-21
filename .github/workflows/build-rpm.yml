@@ -41,25 +41,22 @@ jobs:
         with:
           workspaces: "."
 
-      - name: Build (release)
-        run: cargo build --release --locked
-
-      - name: Package tarball
+      - name: Install packaging tools
         run: |
-          set -euo pipefail
-          strip target/release/caw
-          mkdir -p dist/caw-linux-x86_64
-          cp target/release/caw dist/caw-linux-x86_64/
-          cp README.md PLAN.md dist/caw-linux-x86_64/
-          cp assets/icons/music.svg dist/caw-linux-x86_64/caw.svg
-          tar -C dist -czf dist/caw-linux-x86_64.tar.gz caw-linux-x86_64
-          sha256sum dist/caw-linux-x86_64.tar.gz > dist/caw-linux-x86_64.tar.gz.sha256
+          sudo apt-get install -y rpm
+          curl -fsSL -o /tmp/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+          sudo mv /tmp/appimagetool /usr/local/bin/appimagetool
+
+      - name: Build release + packages (.deb / .rpm / .AppImage / tarball)
+        run: ./scripts/package.sh all
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: caw-linux
-          path: dist/caw-linux-x86_64.tar.gz*
+          path: dist/*
           if-no-files-found: error
 
   build-windows:

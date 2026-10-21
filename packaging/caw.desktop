@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Caw
+GenericName=Music Player
+Comment=Local music player built with GPUI
+Exec=caw
+Icon=caw
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;audio;player;caw;
+StartupWMClass=caw

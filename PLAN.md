@@ -385,3 +385,20 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   （AllMusic 工具栏 56px，详情头 72px）。
 - 播放栏左下角的歌名/歌手区域整块可点击，同样触发定位（cursor 变手型）。
 - 播放栏右下角的小十字准星按钮保留，作为不滚动时的显式入口。
+
+### 发行打包：deb / rpm / AppImage（2026-10-21）
+
+- 新增 `scripts/package.sh [deb|rpm|appimage|tarball|all]`，从 `cargo build --release --locked`
+  的产物生成四种发行物：
+  - `.deb`：`dpkg-deb --root-owner-group`，带 control（Depends: ALSA/xkbcommon/wayland/xcb/
+    fontconfig/freetype/openssl/vulkan）与 /usr/share 桌面文件、图标、文档；
+  - `.rpm`：用 `rpmbuild` + 生成的 spec（Fedora 的 `rpm-build` 提供）；
+  - `.AppImage`：AppDir + `AppRun` + `appimagetool`（支持 `APPIMAGETOOL` 覆盖，
+    自动尝试 `--appimage-extract-and-run` 以规避 FUSE）；
+  - 便携 tar.gz + sha256。
+- 新增 `packaging/caw.desktop`、`packaging/AppRun`（AppImage 入口），复用
+  `assets/icons/music.svg` 作为应用图标。
+- `.github/workflows/build-rpm.yml` 的 Linux job 安装 `rpm` 与 appimagetool 后执行
+  `./scripts/package.sh all`，`dist/*` 全部上传并在 tag 时附加到 Release。
+- 本地验证：deb（12MB，control/文件清单正确）、AppImage（17MB，可解包）、tar.gz 均构建成功；
+  本机未安装 rpm-build，rpm 由 CI 覆盖。

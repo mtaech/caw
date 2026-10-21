@@ -82,9 +82,29 @@ cargo build --release           # 发布构建（target/release/caw）
 
 ## 构建发布
 
-CI（`.github/workflows/build-rpm.yml`）在 Linux 与 Windows 上执行 `cargo build --release --locked`：
-Linux 产出 `caw-linux-x86_64.tar.gz`（含二进制、README、PLAN、图标），Windows 产出 `caw-windows-x86_64.zip`；
-打 `v*` tag 时自动附加到 GitHub Release。
+### 本地打包（Linux）
+
+```bash
+./scripts/package.sh            # 全部：.deb + .rpm + .AppImage + tar.gz
+./scripts/package.sh deb        # 或只打某一种：deb | rpm | appimage | tarball
+```
+
+产物输出到 `dist/`：
+
+| 格式 | 产物 | 额外依赖 |
+|---|---|---|
+| Debian/Ubuntu | `caw_<version>_amd64.deb` | `dpkg-deb`（`dpkg-dev`） |
+| Fedora/RHEL | `caw-<version>-1.x86_64.rpm` | `rpmbuild`（Fedora: `rpm-build`；Ubuntu: `rpm`） |
+| 通用 | `Caw-<version>-x86_64.AppImage` | [appimagetool](https://github.com/AppImage/appimagetool/releases)（可用 `APPIMAGETOOL=/path` 指定） |
+| 便携 | `caw-<version>-linux-x86_64.tar.gz` + `.sha256` | 无 |
+
+缺少某个工具时会跳过对应格式并给出提示；脚本只在实际什么都没打出来时返回非 0。
+
+### CI
+
+`.github/workflows/build-rpm.yml` 在 Linux 上安装 `rpm` 与 `appimagetool` 后执行
+`./scripts/package.sh all`，产出 deb / rpm / AppImage / tar.gz；Windows 产出 zip。
+打 `v*` tag 时所有产物自动附加到 GitHub Release。
 
 ## 文档
 

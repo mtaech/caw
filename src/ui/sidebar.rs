@@ -36,7 +36,7 @@ pub fn render_sidebar(
                 .gap_2()
                 .child(
                     div()
-                        .size_7()
+                        .size_8()
                         .flex_shrink_0()
                         .rounded_md()
                         .bg(rgb(0xffffff))
@@ -45,7 +45,7 @@ pub fn render_sidebar(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child(Icon::new(CawIcon::App).size_5()),
+                        .child(Icon::new(CawIcon::App).size_6()),
                 )
                 .child(
                     v_flex()

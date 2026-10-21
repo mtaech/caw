@@ -76,13 +76,13 @@ impl Render for PlayerApp {
                                     .gap_2()
                                     .child(
                                         div()
-                                            .size_5()
+                                            .size_6()
                                             .rounded_sm()
                                             .bg(rgb(0xffffff))
                                             .flex()
                                             .items_center()
                                             .justify_center()
-                                            .child(Icon::new(CawIcon::App).size_4()),
+                                            .child(Icon::new(CawIcon::App).size_5()),
                                     )
                                     .child(
                                         div()

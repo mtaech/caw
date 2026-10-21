@@ -474,3 +474,17 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 验证（真实进程）：播放到 74.6s → MPRIS Quit → 进程退出、config.last_position=74.96；
   重启日志 `restored session at 75.0s`，MPRIS Position≈75s；受控测试写入 42.0s 后启动，
   状态为 Paused、Position 恰好 42.0s。
+
+### 修复：托盘“音量/播放模式”悬浮弹出重复菜单（2026-10-21）
+
+- 根因：DBusMenu 的 `GetLayout` 忽略了 `parent_id`，客户端请求子菜单（音量 id=7、
+  播放模式 id=8）的布局时仍返回整棵根菜单，Plasma 于是在旁边渲染出第二份菜单。
+- 修复：
+  1. `GetLayout(parent_id)` 按父项返回对应子菜单（7 → 音量档位，8 → 播放模式），
+     其他未知 id 返回空布局；
+  2. 尊重 `recursion_depth`：depth=1 只返回直接子项、不内联子菜单内容（避免同一批
+     子项既嵌套在根布局里又被单独请求）；depth<0 返回完整树；
+  3. “显示 Caw”图标换成 Breeze 存在的 `view-visible-symbolic`（原来的
+     `window-restore-symbolic` 显示为空白方块）。
+- 验证：`GetLayout(0, depth=1)` 只含 8 个顶层项；`GetLayout(7)` 返回 0/25/50/75/100%；
+  `GetLayout(8)` 返回四种播放模式。

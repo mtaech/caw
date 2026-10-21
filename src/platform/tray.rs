@@ -275,7 +275,7 @@ fn item_props(id: i32, snapshot: &NowPlaying) -> Option<MenuProps> {
             true,
             mode_icon(snapshot.playback_mode),
         ),
-        ITEM_SHOW => text("显示 Caw", true, "window-restore-symbolic"),
+        ITEM_SHOW => text("显示 Caw", true, "view-visible-symbolic"),
         ITEM_QUIT => text("退出 Caw", true, "application-exit-symbolic"),
         _ => {
             let volume_index = volume_level_index(snapshot.volume);
@@ -319,7 +319,7 @@ fn mode_children(snapshot: &NowPlaying) -> MenuChildren {
         .collect()
 }
 
-fn menu_children(snapshot: &NowPlaying) -> MenuChildren {
+fn menu_children(snapshot: &NowPlaying, include_submenus: bool) -> MenuChildren {
     vec![
         layout_node(
             ITEM_NOW_PLAYING,
@@ -346,12 +346,20 @@ fn menu_children(snapshot: &NowPlaying) -> MenuChildren {
         layout_node(
             ITEM_VOLUME,
             item_props(ITEM_VOLUME, snapshot).unwrap_or_default(),
-            volume_children(snapshot),
+            if include_submenus {
+                volume_children(snapshot)
+            } else {
+                Vec::new()
+            },
         ),
         layout_node(
             ITEM_MODE,
             item_props(ITEM_MODE, snapshot).unwrap_or_default(),
-            mode_children(snapshot),
+            if include_submenus {
+                mode_children(snapshot)
+            } else {
+                Vec::new()
+            },
         ),
         layout_node(ITEM_SEP_BOTTOM, separator(), Vec::new()),
         layout_node(
@@ -515,17 +523,56 @@ impl DbusMenu {
 
     fn get_layout(
         &self,
-        _parent_id: i32,
-        _recursion_depth: i32,
+        parent_id: i32,
+        recursion_depth: i32,
         _property_names: Vec<String>,
     ) -> MenuLayout {
         let snapshot = self.shared.read();
-        let mut root_props = HashMap::new();
-        root_props.insert("children-display".to_owned(), string_value("submenu"));
-        (
-            revision(&snapshot),
-            (0, root_props, menu_children(&snapshot)),
-        )
+        let revision = revision(&snapshot);
+        // -1 means "everything"; 1 means immediate children only. Respecting this
+        // avoids sending nested submenu items twice (which made Plasma show a
+        // duplicate menu on hover).
+        let include_children = recursion_depth != 0;
+        let include_submenus = !(0..2).contains(&recursion_depth);
+
+        // Clients request a submenu by asking for the layout of its parent id.
+        // Returning the root layout for every id made Plasma render a second,
+        // duplicate menu when hovering 「音量」/「播放模式」.
+        match parent_id {
+            0 => {
+                let mut root_props = HashMap::new();
+                root_props.insert("children-display".to_owned(), string_value("submenu"));
+                (
+                    revision,
+                    (0, root_props, menu_children(&snapshot, include_submenus)),
+                )
+            }
+            ITEM_VOLUME => (
+                revision,
+                (
+                    ITEM_VOLUME,
+                    item_props(ITEM_VOLUME, &snapshot).unwrap_or_default(),
+                    if include_children {
+                        volume_children(&snapshot)
+                    } else {
+                        Vec::new()
+                    },
+                ),
+            ),
+            ITEM_MODE => (
+                revision,
+                (
+                    ITEM_MODE,
+                    item_props(ITEM_MODE, &snapshot).unwrap_or_default(),
+                    if include_children {
+                        mode_children(&snapshot)
+                    } else {
+                        Vec::new()
+                    },
+                ),
+            ),
+            other => (revision, (other, HashMap::new(), Vec::new())),
+        }
     }
 
     fn get_group_properties(

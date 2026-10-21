@@ -35,6 +35,8 @@ use crate::models::playlist::{PlaybackMode, PlaybackState};
 
 #[cfg(target_os = "linux")]
 pub mod mpris;
+#[cfg(target_os = "linux")]
+pub mod tray;
 pub mod window_state;
 
 /// Commands produced by platform threads and applied by the app timer.
@@ -181,7 +183,10 @@ impl Platform {
         crate::log_info!("platform: starting desktop integration");
 
         #[cfg(target_os = "linux")]
-        mpris::spawn(Arc::clone(&shared));
+        {
+            mpris::spawn(Arc::clone(&shared));
+            tray::spawn(Arc::clone(&shared));
+        }
 
         #[cfg(not(target_os = "linux"))]
         crate::log_info!(

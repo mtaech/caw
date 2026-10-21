@@ -12,7 +12,7 @@ GUI 用 `gpui-kit`（GPUI + gpui-component），音频解码用 Symphonia，输�
   不要直接依赖 `gpui`、`gpui-component`：全部从 `gpui_kit` 命名空间导入。
 - **音频**: `symphonia` 解码（FLAC/MP3/WAV/Ogg/AAC/ALAC）→ `cpal` 输出（Linux ALSA/PipeWire）。
 - **存储**: SQLite（`rusqlite`，歌单/音乐目录）+ `~/.config/caw/config.json`（偏好与窗口状态）。
-- **平台**: Linux 优先；MPRIS 走 zbus。系统托盘**暂缓**（ksni 0.3.7 与 zbus 5.19 不兼容，见 PLAN.md）。
+- **平台**: Linux 优先；MPRIS 与系统托盘（StatusNotifierItem + com.canonical.dbusmenu）均直接用 zbus 实现（ksni 0.3.7 与 zbus 5.19 不兼容，未使用）。
 - **目标平台**: Linux（Fedora 开发）；CI 额外构建 Windows。无 Node/npm/Tauri 代码。
 
 ## 常用命令 (Build / run / check)
@@ -48,7 +48,7 @@ cargo fmt                 # 格式化
 - `models/` — `track.rs`（`Track`/`AudioFormat`）、`playlist.rs`（`PlaybackState`/`PlaybackMode`）。
 - `ui/` — `sidebar.rs`、`player_bar.rs`、`icons.rs`（`CawIcon`）、`dialogs.rs`、`marquee.rs`、
   `cover.rs`、`content/{mod,tracks,artists,albums,playlists,folders,settings,queue}.rs`。
-- `platform/` — Linux：MPRIS（zbus）、窗口状态；非 Linux 用 cfg 关闭。
+- `platform/` — Linux：MPRIS、系统托盘（SNI + DBusMenu）、窗口状态；非 Linux 用 cfg 关闭。
 - `paths.rs` / `assets.rs` — `~/.config/caw/` 路径、内嵌 SVG 资源（`CawAssets`）。
 
 ### 必须遵守的约定

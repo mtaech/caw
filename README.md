@@ -20,10 +20,9 @@ GPU 加速渲染，音频由 Symphonia 解码、cpal 输出。
 - 📊 **多维资料库视图** — 全部音乐 / 艺术家 / 专辑 / 文件夹 / 播放列表 / 设置
 - 💾 **会话恢复** — 记住音量、播放模式、上次播放的曲目/队列/位置（暂停态恢复）
 - 📻 **MPRIS 集成** — Linux 桌面媒体键、播放小部件控制（zbus）
+- 🖥️ **系统托盘** — StatusNotifierItem + DBusMenu（zbus 手写实现）：显示窗口、播放/暂停、上下首、退出；关闭窗口可最小化到托盘
+- 🖱️ **双击播放** — 全部音乐 / 歌单 / 专辑 / 艺术家列表双击切歌，当前播放行高亮
 - ⌨️ **键盘快捷键** — 空格播放/暂停，←/→ 上下首，↑/↓ 音量（输入时自动让位）
-
-> 系统托盘暂缓：`ksni 0.3.7` 与 `zbus 5.19` 不兼容，托盘支持推迟到后续版本，
-> 详见 `PLAN.md`。
 
 ## 技术栈
 
@@ -34,7 +33,7 @@ GPU 加速渲染，音频由 Symphonia 解码、cpal 输出。
 | **音频输出** | [cpal](https://github.com/RustAudio/cpal) | Linux: ALSA / PipeWire |
 | **本地存储** | SQLite ([rusqlite](https://github.com/rusqlite/rusqlite)) | 播放列表、音乐目录 |
 | **偏好配置** | `~/.config/caw/config.json`（serde） | 主题、字体、音量、会话恢复 |
-| **系统集成** | [zbus](https://github.com/dbus2/zbus) | Linux MPRIS（媒体键/小部件） |
+| **系统集成** | [zbus](https://github.com/dbus2/zbus) | Linux MPRIS + 系统托盘（StatusNotifierItem / DBusMenu） |
 
 ## 开发
 

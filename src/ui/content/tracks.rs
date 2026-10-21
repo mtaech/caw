@@ -184,6 +184,7 @@ pub(super) fn render_tracks_table(
                     let is_current = current_track_id == Some(track.id);
                     let track_clone = track.clone();
                     let queued = queued.clone();
+                    let row_queue = queued.clone();
                     let track_for_menu = track.clone();
 
                     h_flex()
@@ -193,17 +194,27 @@ pub(super) fn render_tracks_table(
                         .rounded_md()
                         .items_center()
                         .cursor_pointer()
+                        .border_l_2()
+                        .border_color(if is_current {
+                            cx.theme().primary
+                        } else {
+                            gpui::transparent_black()
+                        })
                         .bg(if is_current {
-                            cx.theme().accent
+                            cx.theme().primary.opacity(0.14)
                         } else {
                             gpui::transparent_black()
                         })
                         .hover(|s| s.bg(cx.theme().accent))
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(move |this, _, _, cx| {
-                                this.selected_track_id = Some(track_clone.id);
-                                cx.notify();
+                            cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                                if event.click_count >= 2 {
+                                    this.play_all((*row_queue).clone(), row_idx, cx);
+                                } else {
+                                    this.selected_track_id = Some(track_clone.id);
+                                    cx.notify();
+                                }
                             }),
                         )
                         // # / Playing Indicator

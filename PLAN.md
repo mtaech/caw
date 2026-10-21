@@ -317,3 +317,17 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 字体列表来自 `cx.text_system().all_font_names()`（本机枚举到 534 个 family），去重排序；
   当前配置字体若不在列表中会补到首位，保证触发器始终显示已选值。
 - 选择后立即 `Theme.font_family` 生效并写入 `config.json`（事件：Change/Confirm）。
+
+### 系统托盘 + 双击播放 + 正在播放高亮（2026-10-21）
+
+- **托盘已实现**：`src/platform/tray.rs` 直接基于 zbus 5 实现 StatusNotifierItem +
+  com.canonical.dbusmenu（ksni 与 zbus 5.19 不兼容，改为手写）。KDE 的
+  StatusNotifierWatcher 已注册成功；菜单：显示 Caw / 播放·暂停 / 下一首 / 上一首 / 退出；
+  左键 Activate 显示窗口，滚轮调音量；无托盘宿主时降级为仅最小化并记录警告。
+- 关闭按钮在 `close_to_tray=true` 时保存配置并最小化窗口，托盘“显示 Caw”恢复窗口。
+  标题栏自带的“—”最小化按钮由窗口管理器处理，GPUI 没有拦截 API，仍为普通最小化；
+  托盘图标常驻，可随时恢复。
+- **双击播放**：全部音乐/歌单/专辑/艺术家共用曲目表，行双击（`click_count >= 2`）
+  以当前列表为队列并跳到该行播放；单击仍只选中。
+- **正在播放高亮**：当前行改为 `primary` 14% 透明底色 + 2px 左侧强调条 + 主色标题，
+  暂停时仍保持高亮（当前曲目而非仅“播放中”）。

@@ -557,3 +557,12 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - `caw-mark.svg` 保留作托盘 PNG（`caw-mark.png`）的源图；桌面/任务栏/安装包继续使用
   详细的 `caw.svg`/`caw.png`。
 - 版本号升到 **0.5.2**（About 同步）。
+
+### 打包文件权限修复（2026-10-21）
+
+- 仓库里的 `packaging/caw.desktop`、`PLAN.md`、部分 SVG 曾因编辑器/umask 是 `0600`，
+  `cp` 会把权限原样带进包，导致安装后的 `/usr/share/applications/caw.desktop`
+  普通用户读不到，应用菜单里没有条目、任务栏图标也对不上。
+- `scripts/package.sh` 改用 `install -m 0755`（可执行文件）/ `install -m 0644`（desktop、
+  图标、文档）落盘，不再依赖 checkout 里的文件权限；deb 的 control 同时写入
+  `Installed-Size`（按 staging 目录计算）。

@@ -60,22 +60,25 @@ mkdir -p "$PKGROOT/usr/bin" \
          "$PKGROOT/usr/share/icons/hicolor/scalable/apps" \
          "$PKGROOT/usr/share/icons/hicolor/256x256/apps" \
          "$PKGROOT/usr/share/doc/caw"
-cp "$BIN" "$PKGROOT/usr/bin/caw"
+# Install with explicit modes: the repo checkout may be 0600/0775 (umask, editor),
+# and a non world-readable caw.desktop makes the app menu entry unusable.
+install -m 0755 "$BIN" "$PKGROOT/usr/bin/caw"
 strip "$PKGROOT/usr/bin/caw" 2>/dev/null || true
-cp "$ROOT/packaging/caw.desktop" "$PKGROOT/usr/share/applications/caw.desktop"
-cp "$ROOT/assets/icons/caw.svg" "$PKGROOT/usr/share/icons/hicolor/scalable/apps/caw.svg"
-cp "$ROOT/assets/icons/caw.png" "$PKGROOT/usr/share/icons/hicolor/256x256/apps/caw.png"
-cp "$ROOT/README.md" "$ROOT/PLAN.md" "$PKGROOT/usr/share/doc/caw/"
+install -m 0644 "$ROOT/packaging/caw.desktop" "$PKGROOT/usr/share/applications/caw.desktop"
+install -m 0644 "$ROOT/assets/icons/caw.svg" "$PKGROOT/usr/share/icons/hicolor/scalable/apps/caw.svg"
+install -m 0644 "$ROOT/assets/icons/caw.png" "$PKGROOT/usr/share/icons/hicolor/256x256/apps/caw.png"
+install -m 0644 "$ROOT/README.md" "$ROOT/PLAN.md" "$PKGROOT/usr/share/doc/caw/"
+INSTALLED_KB="$(du -sk "$PKGROOT/usr" | cut -f1)"
 
 build_tarball() {
   say "Building portable tarball"
   local name="caw-${VERSION}-linux-${RPM_ARCH}"
   local stage="$DIST/$name"
   mkdir -p "$stage"
-  cp "$PKGROOT/usr/bin/caw" "$stage/"
-  cp "$ROOT/README.md" "$ROOT/PLAN.md" "$stage/"
-  cp "$ROOT/assets/icons/caw.svg" "$stage/caw.svg"
-  cp "$ROOT/assets/icons/caw.png" "$stage/caw.png"
+  install -m 0755 "$PKGROOT/usr/bin/caw" "$stage/caw"
+  install -m 0644 "$ROOT/README.md" "$ROOT/PLAN.md" "$stage/"
+  install -m 0644 "$ROOT/assets/icons/caw.svg" "$stage/caw.svg"
+  install -m 0644 "$ROOT/assets/icons/caw.png" "$stage/caw.png"
   tar -C "$DIST" -czf "$DIST/$name.tar.gz" "$name"
   rm -rf "$stage"
   (cd "$DIST" && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
@@ -98,6 +101,7 @@ Architecture: $DEB_ARCH
 Maintainer: $MAINTAINER
 Section: sound
 Priority: optional
+Installed-Size: $INSTALLED_KB
 Depends: libasound2, libxkbcommon0, libwayland-client0, libx11-6, libxcb1, libfontconfig1, libfreetype6, libssl3, libvulkan1
 Homepage: https://github.com/mtaech/caw
 Description: $SUMMARY
@@ -178,17 +182,16 @@ build_appimage() {
            "$appdir/usr/share/applications" \
            "$appdir/usr/share/icons/hicolor/scalable/apps" \
            "$appdir/usr/share/icons/hicolor/256x256/apps"
-  cp "$PKGROOT/usr/bin/caw" "$appdir/usr/bin/caw"
-  cp "$ROOT/packaging/caw.desktop" "$appdir/caw.desktop"
-  cp "$ROOT/assets/icons/caw.svg" "$appdir/caw.svg"
-  cp "$ROOT/assets/icons/caw.png" "$appdir/caw.png"
-  cp "$ROOT/packaging/AppRun" "$appdir/AppRun"
-  chmod +x "$appdir/AppRun"
-  cp "$ROOT/assets/icons/caw.svg" \
+  install -m 0755 "$PKGROOT/usr/bin/caw" "$appdir/usr/bin/caw"
+  install -m 0644 "$ROOT/packaging/caw.desktop" "$appdir/caw.desktop"
+  install -m 0644 "$ROOT/assets/icons/caw.svg" "$appdir/caw.svg"
+  install -m 0644 "$ROOT/assets/icons/caw.png" "$appdir/caw.png"
+  install -m 0755 "$ROOT/packaging/AppRun" "$appdir/AppRun"
+  install -m 0644 "$ROOT/assets/icons/caw.svg" \
      "$appdir/usr/share/icons/hicolor/scalable/apps/caw.svg"
-  cp "$ROOT/assets/icons/caw.png" \
+  install -m 0644 "$ROOT/assets/icons/caw.png" \
      "$appdir/usr/share/icons/hicolor/256x256/apps/caw.png"
-  cp "$ROOT/packaging/caw.desktop" \
+  install -m 0644 "$ROOT/packaging/caw.desktop" \
      "$appdir/usr/share/applications/caw.desktop"
 
   local out="$DIST/Caw-${VERSION}-${APPIMAGE_ARCH}.AppImage"

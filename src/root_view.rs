@@ -3,10 +3,10 @@ use std::sync::Arc;
 use gpui_kit::base::{StyledExt, h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::{ActiveTheme, Icon, Sizable, TitleBar};
+use gpui_kit::component::{ActiveTheme, Disableable as _, Icon, Sizable, TitleBar};
 use gpui_kit::*;
 
-use crate::app::PlayerApp;
+use crate::app::{PlayerApp, TagEditState};
 use crate::models::track::Track;
 use crate::ui::content::render_content;
 use crate::ui::icons::CawIcon;
@@ -25,8 +25,10 @@ impl Render for PlayerApp {
 
         // Floating shortcut back to the now-playing row, shown only while that
         // row is scrolled out of view.
-        let floating_locate = (app.current_track.is_some() && !app.now_playing_row_visible())
-            .then(|| build_floating_locate(entity.clone(), cx));
+        let floating_locate = (app.current_track.is_some()
+            && !app.show_now_playing
+            && !app.now_playing_row_visible())
+        .then(|| build_floating_locate(entity.clone(), cx));
 
         let add_to_playlist_overlay = app.add_to_playlist_track.clone().map(|track| {
             let playlists = app
@@ -36,6 +38,13 @@ impl Render for PlayerApp {
                 .collect::<Vec<_>>();
             build_add_to_playlist_overlay(entity.clone(), track, playlists, cx)
         });
+
+        // Tag/metadata editor. Its inputs own focus while it is open, and the
+        // root shortcut handler stops forwarding keys.
+        let tag_edit_overlay = app
+            .tag_edit
+            .as_ref()
+            .map(|edit| build_tag_editor_overlay(entity.clone(), edit, cx));
 
         div()
             .size_full()
@@ -48,51 +57,7 @@ impl Render for PlayerApp {
             .child(
                 v_flex()
                     .size_full()
-                    .child({
-                        let close_entity = entity.clone();
-                        TitleBar::new()
-                            .on_close_window(move |_, window, cx| {
-                                crate::platform::window_state::save_now(window);
-                                let close_to_tray = close_entity.read(cx).config.close_to_tray;
-                                crate::log_info!(
-                                    "titlebar close requested (close_to_tray={close_to_tray})"
-                                );
-                                if close_to_tray {
-                                    close_entity.update(cx, |app, _| app.save_state_now());
-                                    // Remove the taskbar entry too, not just minimize.
-                                    crate::platform::set_taskbar_visible(false);
-                                    window.minimize_window();
-                                } else {
-                                    crate::ui::dialogs::open_close_confirm(
-                                        window,
-                                        cx,
-                                        close_entity.clone(),
-                                    );
-                                }
-                            })
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .size_6()
-                                            .rounded_sm()
-                                            .bg(rgb(0xffffff))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .child(Icon::new(CawIcon::App).size_5()),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_semibold()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("Caw"),
-                                    ),
-                            )
-                    })
+                    .child(build_title_bar(entity.clone(), cx))
                     .child(
                         h_flex()
                             .flex_1()
@@ -106,7 +71,34 @@ impl Render for PlayerApp {
             .children(floating_locate)
             .children(create_playlist_overlay)
             .children(add_to_playlist_overlay)
+            .children(tag_edit_overlay)
     }
+}
+
+/// Opaque 34px title bar: the app name on the left, window controls on the right.
+fn build_title_bar(entity: Entity<PlayerApp>, cx: &mut Context<PlayerApp>) -> impl IntoElement {
+    TitleBar::new()
+        .bg(cx.theme().title_bar)
+        .on_close_window(move |_, window, cx| {
+            crate::platform::window_state::save_now(window);
+            let close_to_tray = entity.read(cx).config.close_to_tray;
+            crate::log_info!("window close requested (close_to_tray={close_to_tray})");
+            if close_to_tray {
+                entity.update(cx, |app, _| app.save_state_now());
+                // Remove the taskbar entry too, not just minimize.
+                crate::platform::set_taskbar_visible(false);
+                window.minimize_window();
+            } else {
+                crate::ui::dialogs::open_close_confirm(window, cx, entity.clone());
+            }
+        })
+        .child(
+            div()
+                .text_sm()
+                .font_semibold()
+                .text_color(cx.theme().foreground)
+                .child("Caw"),
+        )
 }
 
 /// Round floating button that jumps back to the now-playing row.
@@ -148,7 +140,14 @@ fn handle_shortcut(
     window: &mut Window,
     cx: &mut Context<PlayerApp>,
 ) {
-    // Never steal keys from a text field or an open modal.
+    // Never steal keys from a text field or an open modal. Escape closes the
+    // metadata editor; every other key belongs to its inputs.
+    if app.tag_edit.is_some() {
+        if event.keystroke.key.as_str() == "escape" {
+            app.close_tag_editor(window, cx);
+        }
+        return;
+    }
     if app.create_playlist_input.is_some() || app.add_to_playlist_track.is_some() {
         return;
     }
@@ -175,6 +174,8 @@ fn handle_shortcut(
             app.set_volume(vol, cx);
             sync_volume_slider(app, vol, window, cx);
         }
+        "l" => app.toggle_now_playing(cx),
+        "escape" => app.close_now_playing(cx),
         _ => {}
     }
 }
@@ -346,4 +347,143 @@ fn build_add_to_playlist_overlay(
                 ),
         )
         .into_any_element()
+}
+
+/// Modal for editing the tag fields Caw exposes.
+fn build_tag_editor_overlay(
+    entity: Entity<PlayerApp>,
+    edit: &TagEditState,
+    cx: &mut Context<PlayerApp>,
+) -> AnyElement {
+    let background = cx.theme().popover;
+    let border = cx.theme().border;
+    let foreground = cx.theme().foreground;
+    let muted = cx.theme().muted_foreground;
+    let danger = cx.theme().danger;
+
+    let cancel_entity = entity.clone();
+    let save_entity = entity;
+    let saving = edit.saving;
+    let file_label = edit
+        .path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| edit.path.display().to_string());
+
+    let mut fields = v_flex()
+        .w_full()
+        .gap_3()
+        .child(tag_field("标题", &edit.title, muted))
+        .child(tag_field("艺术家", &edit.artist, muted))
+        .child(tag_field("专辑", &edit.album, muted))
+        .child(tag_field("专辑艺术家", &edit.album_artist, muted))
+        .child(tag_field("流派", &edit.genre, muted))
+        .child(
+            h_flex()
+                .w_full()
+                .gap_3()
+                .child(
+                    h_flex()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .child(tag_field("年份", &edit.year, muted)),
+                )
+                .child(h_flex().flex_1().min_w(px(0.)).child(tag_field(
+                    "音轨号",
+                    &edit.track_number,
+                    muted,
+                )))
+                .child(h_flex().flex_1().min_w(px(0.)).child(tag_field(
+                    "碟号",
+                    &edit.disc_number,
+                    muted,
+                ))),
+        );
+
+    if let Some(message) = edit.error.clone() {
+        fields = fields.child(div().text_xs().text_color(danger).child(message));
+    }
+
+    div()
+        .absolute()
+        .inset_0()
+        .bg(rgba(0x00000088))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            v_flex()
+                .w(px(520.))
+                .p_5()
+                .rounded_lg()
+                .bg(background)
+                .border_1()
+                .border_color(border)
+                .shadow_lg()
+                .gap_4()
+                .child(
+                    v_flex()
+                        .w_full()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_base()
+                                .font_semibold()
+                                .text_color(foreground)
+                                .child("编辑音乐标签"),
+                        )
+                        .child(
+                            div()
+                                .w_full()
+                                .text_xs()
+                                .text_color(muted)
+                                .truncate()
+                                .child(file_label),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child("音轨号与碟号可填「3/12」，表示第 3 首、共 12 首。"),
+                        ),
+                )
+                .child(fields)
+                .child(
+                    h_flex()
+                        .w_full()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            Button::new("btn-cancel-tag-edit")
+                                .ghost()
+                                .small()
+                                .label("取消")
+                                .disabled(saving)
+                                .on_click(move |_, window, cx| {
+                                    cancel_entity
+                                        .update(cx, |app, cx| app.close_tag_editor(window, cx));
+                                }),
+                        )
+                        .child(
+                            Button::new("btn-save-tag-edit")
+                                .primary()
+                                .small()
+                                .label(if saving { "保存中…" } else { "保存" })
+                                .loading(saving)
+                                .disabled(saving)
+                                .on_click(move |_, window, cx| {
+                                    save_entity.update(cx, |app, cx| app.save_tag_edit(window, cx));
+                                }),
+                        ),
+                ),
+        )
+        .into_any_element()
+}
+
+fn tag_field(label: &'static str, input: &Entity<InputState>, muted: Hsla) -> impl IntoElement {
+    v_flex()
+        .w_full()
+        .gap_1()
+        .child(div().text_xs().text_color(muted).child(label))
+        .child(Input::new(input))
 }

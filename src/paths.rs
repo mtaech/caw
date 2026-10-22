@@ -23,6 +23,18 @@ pub fn covers_dir() -> PathBuf {
     dir
 }
 
+/// Directory for online lyrics cached as `.lrc`: `~/.config/caw/lyrics/`
+pub fn lyrics_dir() -> PathBuf {
+    let dir = caw_dir().join("lyrics");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// Cache path for one track's online lyrics.
+pub fn lyrics_cache_path(track_id: u64) -> PathBuf {
+    lyrics_dir().join(format!("{track_id}.lrc"))
+}
+
 /// Path to config.json: `~/.config/caw/config.json`
 pub fn config_path() -> PathBuf {
     caw_dir().join("config.json")
@@ -38,13 +50,22 @@ pub fn log_path() -> PathBuf {
     caw_dir().join("caw.log")
 }
 
-/// Save cover art bytes to disk if present, returning the file path.
+/// Cache path for one track's cover (embedded or downloaded).
+pub fn cover_path(track_id: u64) -> PathBuf {
+    covers_dir().join(format!("{track_id}.jpg"))
+}
+
+/// Save embedded cover art on first use, or return an already cached cover.
+///
+/// Online covers are written to the same path, so this finds both embedded and
+/// downloaded art; callers keep using this one function.
 pub fn get_or_save_cover(track: &crate::models::track::Track) -> Option<PathBuf> {
-    let cover_data = track.cover_data.as_ref()?;
-    let covers_dir = covers_dir();
-    let file_path = covers_dir.join(format!("{}.jpg", track.id));
-    if !file_path.exists() {
-        let _ = std::fs::write(&file_path, &**cover_data);
+    let file_path = cover_path(track.id);
+    if file_path.exists() {
+        return Some(file_path);
     }
+
+    let cover_data = track.cover_data.as_ref()?;
+    let _ = std::fs::write(&file_path, &**cover_data);
     Some(file_path)
 }

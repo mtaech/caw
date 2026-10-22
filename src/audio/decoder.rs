@@ -80,7 +80,7 @@ fn read_tags_from_revision(
 ///      bytes -> likely mojibake. Reverse the UTF-8 encoding to recover the
 ///      original bytes, decode as GBK; if it yields valid text with CJK,
 ///      use it, else fall back to the original.
-fn fix_mojibake(s: String) -> String {
+pub(crate) fn fix_mojibake(s: String) -> String {
     // 1. Pure ASCII fast path.
     if s.is_ascii() {
         return s;
@@ -197,6 +197,51 @@ pub fn read_metadata(path: &Path, id: u64) -> Result<Arc<Track>> {
         format: audio_format,
         cover_data,
     }))
+}
+
+/// Read unsynchronised lyrics embedded in the file's tags (`USLT` in ID3,
+/// `LYRICS` in Vorbis comments). Returns `None` when the file has no lyrics.
+pub fn read_embedded_lyrics(path: &Path) -> Option<String> {
+    let src = File::open(path).ok()?;
+    let mss = MediaSourceStream::new(Box::new(src), Default::default());
+
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+
+    let mut probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .ok()?;
+
+    let mut lyrics = None;
+    if let Some(metadata) = probed.metadata.get()
+        && let Some(revision) = metadata.current()
+    {
+        lyrics = lyrics_from_revision(revision);
+    }
+
+    // Some containers expose tags through the format reader instead.
+    if lyrics.is_none()
+        && let Some(revision) = probed.format.metadata().current()
+    {
+        lyrics = lyrics_from_revision(revision);
+    }
+
+    lyrics
+}
+
+fn lyrics_from_revision(rev: &symphonia::core::meta::MetadataRevision) -> Option<String> {
+    rev.tags()
+        .iter()
+        .find(|tag| tag.std_key == Some(symphonia::core::meta::StandardTagKey::Lyrics))
+        .map(|tag| fix_mojibake(tag.value.to_string()))
+        .filter(|text| !text.trim().is_empty())
 }
 
 /// Fully decode an audio file into PCM f32 samples.

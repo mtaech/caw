@@ -20,7 +20,7 @@ _Avoid_: App, state, controller, view model
 
 **Root view**:
 `src/root_view.rs`, the `Render` implementation that composes TitleBar + Sidebar +
-Content + PlayerBar and hosts global shortcuts and modal overlays.
+Content + PlayerBar, and hosts global shortcuts and modal overlays.
 _Avoid_: shell, frame, layout wrapper
 
 **Content view**:
@@ -40,10 +40,34 @@ canonical file path.
 _Avoid_: Folder path, library path
 
 **Cover art**:
-Embedded art extracted during metadata scan, cached under `~/.config/caw/covers/`.
+Embedded art extracted during metadata scan, or downloaded online (NetEase first, iTunes
+fallback), cached under `~/.config/caw/covers/<track-id>.jpg`. `get_or_save_cover` returns
+an existing cached file before writing embedded bytes, so both sources share one path.
 Always passed to `img()` as a `PathBuf` (a `String` would be looked up in the asset
 bundle instead of the filesystem).
 _Avoid_: Artwork URL, thumbnail
+
+**Lyrics**:
+Per-track text loaded lazily from a sidecar `.lrc` beside the audio file, the embedded
+`LYRICS` / `USLT` tag, a cached online result, or a NetEase search. Parsed into
+`lyrics::Lyrics` (`lines`, `synced`, `source`); a synced line carries a timestamp and drives
+the highlight in the now-playing view. Online results are cached as
+`~/.config/caw/lyrics/<track-id>.lrc`.
+_Avoid_: subtitle, caption, transcript
+
+**Tag metadata**:
+Editable text fields (title, artist, album, album artist, genre, year, track, disc)
+written through Lofty in `src/tags.rs`. Scanning and playback still read tags with
+Symphonia (read-only). The editor re-encodes the existing tag object, so cover art and
+unknown frames survive, and it keeps the file's ID3v2 version (2.3 stays 2.3; a tagless
+MP3 gets 2.3). Writes run on the background executor and refresh only the edited track.
+_Avoid_: ID3 tags, file info, properties
+
+**Now-playing view**:
+The full content-area view (`ui/content/now_playing.rs`) with a large cover and the lyrics
+column. It is not a NavItem: the player-bar cover, the lyrics button, and `L` toggle it, and
+any sidebar navigation or `Esc` leaves it.
+_Avoid_: player page, lyrics panel, fullscreen player
 
 **Platform integration**:
 Linux-only side effects (MPRIS, window bounds capture) in `src/platform/`. They read a

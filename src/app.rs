@@ -15,8 +15,10 @@ use crate::audio::library::{find_music_dirs, scan_directories};
 use crate::audio::player::{Player, PlayerCommand};
 use crate::config::AppConfig;
 use crate::db::{Database, PlaylistRow};
+use crate::lyrics::Lyrics;
 use crate::models::playlist::{PlaybackMode, PlaybackState};
 use crate::models::track::Track;
+use crate::tags::EditableTags;
 use crate::ui::fonts::{FontItem, system_font_items};
 
 /// Minimum interval between config.json writes (see `PlayerApp::flush_config`).
@@ -24,17 +26,11 @@ const CONFIG_SAVE_THROTTLE: Duration = Duration::from_millis(750);
 
 /// Height of one row in the shared track table, in logical pixels.
 ///
-/// The "locate now playing" action converts a row index into a scroll offset,
-/// so rows must keep this fixed height.
+/// The virtualized list needs a uniform row height, and the "locate now
+/// playing" visibility check converts pixels back into row indexes.
 pub const LIST_ROW_HEIGHT: f32 = 38.0;
 
-/// Distance from the top of the content scroll area to the first data row.
-///
-/// These mirror the fixed header heights in the content views (24px content
-/// padding + view header + 16px gap + table header + 4px gap). Keep them in
-/// sync when those layouts change.
-const FIRST_ROW_TOP_ALL_MUSIC: f32 = 138.0;
-const FIRST_ROW_TOP_DETAIL: f32 = 154.0;
+/// Distance from the top of the folder scroll area to the first row.
 const FIRST_ROW_TOP_FOLDER: f32 = 104.0;
 /// Folder rows are natural-height rows with an 8px gap between them.
 const FOLDER_ROW_PITCH: f32 = 44.0;
@@ -64,6 +60,27 @@ pub enum DetailTarget {
     Folder(PathBuf),
 }
 
+/// Inputs and status of the metadata editor modal.
+///
+/// Every editable field is its own `InputState`; `track_id`/`path` freeze the
+/// target so a list re-sort or filter change cannot retarget the save.
+pub struct TagEditState {
+    pub track_id: u64,
+    pub path: PathBuf,
+    pub title: Entity<InputState>,
+    pub artist: Entity<InputState>,
+    pub album: Entity<InputState>,
+    pub album_artist: Entity<InputState>,
+    pub genre: Entity<InputState>,
+    pub year: Entity<InputState>,
+    pub track_number: Entity<InputState>,
+    pub disc_number: Entity<InputState>,
+    /// Shown inside the modal; set on read/save failures.
+    pub error: Option<String>,
+    /// A write is in flight; the modal disables its buttons.
+    pub saving: bool,
+}
+
 pub struct PlayerApp {
     /// Full scanned music library.
     pub library: Vec<Arc<Track>>,
@@ -73,8 +90,14 @@ pub struct PlayerApp {
     pub search_query: String,
     /// Search input entity.
     pub search_input: Entity<InputState>,
-    /// Scroll handle of the content area, used by "locate now playing".
+    /// Scroll handle of the content area, used by grid/settings/folder views.
     pub content_scroll_handle: ScrollHandle,
+    /// Scroll position of the virtualized track list (All Music and details).
+    pub track_list_scroll_handle: UniformListScrollHandle,
+    /// Scroll position of the virtualized queue drawer list.
+    pub queue_scroll_handle: UniformListScrollHandle,
+    /// Scroll position of the recent-history section in the queue drawer.
+    pub queue_history_scroll_handle: ScrollHandle,
 
     /// Currently active sidebar nav item.
     pub selected_nav: NavItem,
@@ -125,10 +148,29 @@ pub struct PlayerApp {
     /// Whether queue drawer is open.
     pub show_queue: bool,
 
+    /// Whether the content area shows the now-playing view (large cover + lyrics).
+    pub show_now_playing: bool,
+    /// Parsed lyrics for `current_track`, loaded off the UI thread.
+    pub lyrics: Option<Arc<Lyrics>>,
+    /// Track id the loaded lyrics belong to; guards against a late load winning.
+    lyrics_track_id: Option<u64>,
+    /// Whether a lyrics load is currently in flight.
+    pub lyrics_loading: bool,
+    /// Highlighted line index in `lyrics` (synced lyrics only).
+    pub lyrics_active_line: Option<usize>,
+    /// Scroll offset owner of the lyrics column.
+    pub lyrics_scroll_handle: ScrollHandle,
+    /// Last active line the lyrics column auto-scrolled to.
+    lyrics_scrolled_line: Option<usize>,
+    /// Tracks already looked up for online cover art this session.
+    cover_attempts: std::collections::HashSet<u64>,
+
     /// Input state for creating playlist dialog.
     pub create_playlist_input: Option<Entity<InputState>>,
     /// Track being added to a playlist (modal open).
     pub add_to_playlist_track: Option<Arc<Track>>,
+    /// Open tag/metadata editor (modal), if any.
+    pub tag_edit: Option<TagEditState>,
 
     /// Searchable picker listing every installed system font family.
     pub font_picker: Entity<ComboboxState<SearchableVec<FontItem>>>,
@@ -148,6 +190,14 @@ pub struct PlayerApp {
     session_restored: bool,
     /// Last periodic session save, used to keep `config.last_position` fresh.
     last_session_save: Instant,
+}
+
+/// Fresh single-line input for the metadata editor.
+///
+/// Deliberately no `clean_on_escape`: Escape must bubble to the root view and
+/// close the modal instead of silently clearing a field.
+fn tag_input(window: &mut Window, cx: &mut Context<PlayerApp>) -> Entity<InputState> {
+    cx.new(|cx| InputState::new(window, cx))
 }
 
 impl PlayerApp {
@@ -270,6 +320,9 @@ impl PlayerApp {
             search_query: String::new(),
             search_input,
             content_scroll_handle: ScrollHandle::new(),
+            track_list_scroll_handle: UniformListScrollHandle::new(),
+            queue_scroll_handle: UniformListScrollHandle::new(),
+            queue_history_scroll_handle: ScrollHandle::new(),
             selected_nav: NavItem::AllMusic,
             detail_target: None,
             selected_track_id: None,
@@ -296,8 +349,17 @@ impl PlayerApp {
             music_dirs,
             scanning: false,
             show_queue: false,
+            show_now_playing: false,
+            lyrics: None,
+            lyrics_track_id: None,
+            lyrics_loading: false,
+            lyrics_active_line: None,
+            lyrics_scroll_handle: ScrollHandle::new(),
+            lyrics_scrolled_line: None,
+            cover_attempts: std::collections::HashSet::new(),
             create_playlist_input: None,
             add_to_playlist_track: None,
+            tag_edit: None,
             font_picker,
             config,
             focus_handle: cx.focus_handle(),
@@ -354,21 +416,30 @@ impl PlayerApp {
 
     /// Re-calculate filtered indices based on search query.
     pub fn apply_filter(&mut self) {
+        self.filtered_indices = self.compute_filter();
+
+        // A shorter result set must not leave the virtual list scrolled past
+        // its end.
+        self.track_list_scroll_handle
+            .scroll_to_item(0, ScrollStrategy::Top);
+    }
+
+    /// Indices into `library` matching the current search query.
+    fn compute_filter(&self) -> Vec<usize> {
         if self.search_query.trim().is_empty() {
-            self.filtered_indices = (0..self.library.len()).collect();
+            (0..self.library.len()).collect()
         } else {
-            let q = self.search_query.trim().to_lowercase();
-            self.filtered_indices = self
-                .library
+            let query = self.search_query.trim().to_lowercase();
+            self.library
                 .iter()
                 .enumerate()
-                .filter(|(_, t)| {
-                    t.title.to_lowercase().contains(&q)
-                        || t.artist.to_lowercase().contains(&q)
-                        || t.album.to_lowercase().contains(&q)
+                .filter(|(_, track)| {
+                    track.title.to_lowercase().contains(&query)
+                        || track.artist.to_lowercase().contains(&query)
+                        || track.album.to_lowercase().contains(&query)
                 })
-                .map(|(i, _)| i)
-                .collect();
+                .map(|(index, _)| index)
+                .collect()
         }
     }
 
@@ -376,18 +447,26 @@ impl PlayerApp {
     pub fn select_nav(&mut self, nav: NavItem, cx: &mut Context<Self>) {
         self.selected_nav = nav;
         self.detail_target = None;
+        self.show_now_playing = false;
+        self.track_list_scroll_handle
+            .scroll_to_item(0, ScrollStrategy::Top);
         cx.notify();
     }
 
     /// Open detail view (e.g. artist, album, playlist, folder).
     pub fn open_detail(&mut self, target: DetailTarget, cx: &mut Context<Self>) {
         self.detail_target = Some(target);
+        self.show_now_playing = false;
+        self.track_list_scroll_handle
+            .scroll_to_item(0, ScrollStrategy::Top);
         cx.notify();
     }
 
     /// Back to list view.
     pub fn back_to_list(&mut self, cx: &mut Context<Self>) {
         self.detail_target = None;
+        self.track_list_scroll_handle
+            .scroll_to_item(0, ScrollStrategy::Top);
         cx.notify();
     }
 
@@ -400,6 +479,9 @@ impl PlayerApp {
         let Some(current) = self.current_track.clone() else {
             return;
         };
+
+        // Locating means showing the list row, so leave the now-playing view.
+        self.close_now_playing(cx);
 
         if self.detail_target.is_none() {
             match self.selected_nav {
@@ -438,13 +520,29 @@ impl PlayerApp {
             self.apply_filter();
         }
 
+        if self.is_track_list_view() {
+            let Some(row) = self.visible_row_of(current.id) else {
+                crate::log_debug!("locate: now-playing track is not in the active list");
+                return;
+            };
+            crate::log_debug!(
+                "locate: track '{}' at row {}, scrolling virtual list",
+                current.display_title(),
+                row
+            );
+            self.track_list_scroll_handle
+                .scroll_to_item_with_offset(row, ScrollStrategy::Top, 1);
+            cx.notify();
+            return;
+        }
+
         let Some(metrics) = self.current_row_metrics() else {
             crate::log_debug!("locate: now-playing track is not in the active view");
             return;
         };
 
-        // Leave one and a half rows above the target so it does not sit flush
-        // against the top edge. The offset is clamped by gpui during prepaint.
+        // Folder rows are natural-height; leave a row and a half above the
+        // target so it does not sit flush against the top edge.
         let offset = (metrics.top - metrics.pitch * 1.5).max(0.0);
         crate::log_debug!(
             "locate: track '{}' at row {}, scroll offset {:.0}px",
@@ -457,12 +555,41 @@ impl PlayerApp {
         cx.notify();
     }
 
+    /// Whether the active content view renders the virtualized track table.
+    pub fn is_track_list_view(&self) -> bool {
+        match self.selected_nav {
+            NavItem::AllMusic => true,
+            NavItem::Artists | NavItem::Albums | NavItem::Playlists => self.detail_target.is_some(),
+            NavItem::Folders | NavItem::Settings => false,
+        }
+    }
+
     /// Whether the now-playing row is currently inside the content viewport.
     ///
     /// Returns `true` when the active view has no row for the track (so callers
     /// do not offer a locate affordance that cannot do anything) or before the
     /// scroll area has been laid out.
     pub fn now_playing_row_visible(&self) -> bool {
+        if self.is_track_list_view() {
+            let Some(current) = self.current_track.as_ref() else {
+                return true;
+            };
+            let Some(row) = self.visible_row_of(current.id) else {
+                return true;
+            };
+
+            let handle = self.track_list_scroll_handle.0.borrow().base_handle.clone();
+            let bounds = handle.bounds();
+            if bounds.size.height <= px(1.0) || bounds.size.width <= px(1.0) {
+                return true;
+            }
+            let first = ((-handle.offset().y).as_f32() / LIST_ROW_HEIGHT)
+                .floor()
+                .max(0.0) as usize;
+            let visible = (bounds.size.height.as_f32() / LIST_ROW_HEIGHT).ceil() as usize + 1;
+            return row >= first && row < first + visible;
+        }
+
         let Some(metrics) = self.current_row_metrics() else {
             return true;
         };
@@ -479,24 +606,20 @@ impl PlayerApp {
         row_bottom > view_top + px(2.0) && row_top < view_bottom - px(2.0)
     }
 
-    /// Geometry of the now-playing row inside the content scroll area.
+    /// Geometry of a folder row inside the outer content scroll area.
     fn current_row_metrics(&self) -> Option<RowMetrics> {
         let current = self.current_track.as_ref()?;
-        let (top, pitch) = match (&self.selected_nav, &self.detail_target) {
-            (NavItem::AllMusic, _) => (FIRST_ROW_TOP_ALL_MUSIC, LIST_ROW_HEIGHT),
-            (NavItem::Artists | NavItem::Albums | NavItem::Playlists, Some(_)) => {
-                (FIRST_ROW_TOP_DETAIL, LIST_ROW_HEIGHT)
-            }
-            (NavItem::Folders, Some(DetailTarget::Folder(_))) => {
-                (FIRST_ROW_TOP_FOLDER, FOLDER_ROW_PITCH)
-            }
-            _ => return None,
-        };
+        if !matches!(
+            (&self.selected_nav, &self.detail_target),
+            (NavItem::Folders, Some(DetailTarget::Folder(_)))
+        ) {
+            return None;
+        }
         let index = self.visible_row_of(current.id)?;
         Some(RowMetrics {
             index,
-            top: top + index as f32 * pitch,
-            pitch,
+            top: FIRST_ROW_TOP_FOLDER + index as f32 * FOLDER_ROW_PITCH,
+            pitch: FOLDER_ROW_PITCH,
         })
     }
 
@@ -608,6 +731,8 @@ impl PlayerApp {
 
         let previous = self.current_track.clone();
         self.current_track = Some(track.clone());
+        self.load_lyrics_for_current(cx);
+        self.load_cover_for_current(cx);
         self.duration = track.duration.as_secs_f64();
         self.position = start_pos.clamp(0.0, self.duration);
         self.playback_state = PlaybackState::Playing;
@@ -815,6 +940,8 @@ impl PlayerApp {
     /// Also flushes dirty preferences, so config writes ride on the same tick.
     pub fn update_position(&mut self, cx: &mut Context<Self>) {
         self.flush_config(cx);
+        self.sync_lyrics_line(cx);
+        self.follow_lyrics(cx);
 
         if self.playback_state != PlaybackState::Playing {
             return;
@@ -854,6 +981,14 @@ impl PlayerApp {
     /// Toggle queue drawer.
     pub fn toggle_queue(&mut self, cx: &mut Context<Self>) {
         self.show_queue = !self.show_queue;
+        if self.show_queue
+            && let Some(index) = self.queue_index
+        {
+            // Opening the drawer should land on the current track instead of
+            // the top of a 621-item queue.
+            self.queue_scroll_handle
+                .scroll_to_item(index, ScrollStrategy::Center);
+        }
         cx.notify();
     }
 
@@ -872,10 +1007,267 @@ impl PlayerApp {
         self.queue.clear();
         self.queue_index = None;
         self.current_track = None;
+        self.load_lyrics_for_current(cx);
         self.position = 0.0;
         self.duration = 0.0;
         self.persist_session();
         cx.notify();
+    }
+
+    // ── Now playing view / lyrics ──
+
+    /// Show the now-playing view: large cover, track details and lyrics.
+    pub fn open_now_playing(&mut self, cx: &mut Context<Self>) {
+        if self.show_now_playing {
+            return;
+        }
+        self.show_now_playing = true;
+        // The lyrics column is laid out fresh; recenter on the active line.
+        self.lyrics_scrolled_line = None;
+        cx.notify();
+    }
+
+    /// Return from the now-playing view to the previously selected list.
+    pub fn close_now_playing(&mut self, cx: &mut Context<Self>) {
+        if !self.show_now_playing {
+            return;
+        }
+        self.show_now_playing = false;
+        self.lyrics_scrolled_line = None;
+        cx.notify();
+    }
+
+    /// Toggle the now-playing view (player-bar button / `L` shortcut).
+    pub fn toggle_now_playing(&mut self, cx: &mut Context<Self>) {
+        if self.show_now_playing {
+            self.close_now_playing(cx);
+        } else {
+            self.open_now_playing(cx);
+        }
+    }
+
+    /// Fetch missing cover art for the current track on the background executor.
+    ///
+    /// Embedded art (or an earlier online result) wins; each track is attempted
+    /// at most once per session so a miss does not hammer the providers.
+    fn load_cover_for_current(&mut self, cx: &mut Context<Self>) {
+        let Some(track) = self.current_track.clone() else {
+            return;
+        };
+        if !self.config.fetch_covers_online {
+            return;
+        }
+        if crate::paths::get_or_save_cover(&track).is_some() {
+            return;
+        }
+        if !self.cover_attempts.insert(track.id) {
+            return;
+        }
+
+        let track_id = track.id;
+        let path = crate::paths::cover_path(track_id);
+        let track_for_fetch = track.clone();
+        cx.spawn(async move |entity, cx| {
+            let bytes = cx
+                .background_executor()
+                .spawn(async move { crate::covers::fetch(&track_for_fetch) })
+                .await;
+            let Some(bytes) = bytes else {
+                crate::log_debug!("no online cover found for track {}", track_id);
+                return;
+            };
+            if !crate::netease::is_image(&bytes) {
+                crate::log_warn!("online cover for track {} is not an image", track_id);
+                return;
+            }
+
+            // Write then rename so a crash cannot leave a truncated cover that
+            // every later render would try to decode.
+            let tmp = path.with_extension("jpg.tmp");
+            if let Err(err) =
+                std::fs::write(&tmp, &bytes).and_then(|_| std::fs::rename(&tmp, &path))
+            {
+                crate::log_warn!("failed to cache cover for track {}: {}", track_id, err);
+                let _ = std::fs::remove_file(&tmp);
+                return;
+            }
+
+            let _ = entity.update(cx, |this, cx| {
+                crate::log_info!(
+                    "cover cached for track {} ({} bytes)",
+                    track_id,
+                    bytes.len()
+                );
+                if this.current_track.as_ref().map(|t| t.id) == Some(track_id) {
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Load lyrics for the current track on the background executor.
+    ///
+    /// Probe + tag decode touch the filesystem, so they never run in render or
+    /// on the UI thread. A generation check keeps a slow load for the previous
+    /// track from replacing the current one.
+    fn load_lyrics_for_current(&mut self, cx: &mut Context<Self>) {
+        let Some(track) = self.current_track.clone() else {
+            self.lyrics = None;
+            self.lyrics_track_id = None;
+            self.lyrics_loading = false;
+            self.lyrics_active_line = None;
+            self.lyrics_scrolled_line = None;
+            return;
+        };
+
+        // Replaying or seeking the same track keeps the already parsed lyrics.
+        if self.lyrics_track_id == Some(track.id) && (self.lyrics.is_some() || self.lyrics_loading)
+        {
+            return;
+        }
+
+        let track_id = track.id;
+        self.lyrics = None;
+        self.lyrics_track_id = Some(track_id);
+        self.lyrics_loading = true;
+        self.lyrics_active_line = None;
+        self.lyrics_scrolled_line = None;
+        let online = self.config.fetch_lyrics_online;
+
+        cx.spawn(async move |entity, cx| {
+            let loaded = cx
+                .background_executor()
+                .spawn(async move { crate::lyrics::load(&track, online) })
+                .await;
+
+            let _ = entity.update(cx, |this, cx| {
+                if this.lyrics_track_id != Some(track_id) {
+                    return;
+                }
+                this.lyrics_loading = false;
+                this.lyrics = loaded.map(Arc::new);
+                this.lyrics_active_line = None;
+                this.lyrics_scrolled_line = None;
+                if let Some(lyrics) = this.lyrics.as_ref() {
+                    crate::log_info!(
+                        "lyrics loaded: {} lines (synced={}, source={})",
+                        lyrics.lines.len(),
+                        lyrics.synced,
+                        lyrics.source.label()
+                    );
+                    let position = duration_from_secs(this.position);
+                    this.lyrics_active_line = lyrics.active_line(position);
+                } else {
+                    crate::log_debug!("no lyrics found for track {}", track_id);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Recompute the highlighted lyric line from the playback position.
+    fn sync_lyrics_line(&mut self, cx: &mut Context<Self>) {
+        let position = duration_from_secs(self.position);
+        let next = self
+            .lyrics
+            .as_ref()
+            .and_then(|lyrics| lyrics.active_line(position));
+        if next != self.lyrics_active_line {
+            self.lyrics_active_line = next;
+            cx.notify();
+        }
+    }
+
+    /// Keep the highlighted line inside the visible lyrics column.
+    fn follow_lyrics(&mut self, cx: &mut Context<Self>) {
+        if !self.show_now_playing {
+            return;
+        }
+        let Some(index) = self.lyrics_active_line else {
+            return;
+        };
+        if self.lyrics_scrolled_line == Some(index) {
+            return;
+        }
+        if self.scroll_lyrics_to_active(index) {
+            self.lyrics_scrolled_line = Some(index);
+            cx.notify();
+        }
+    }
+
+    /// Place the active line about a third of the way down the viewport.
+    ///
+    /// Returns `false` until the lyrics column has been laid out, so callers
+    /// can retry on the next tick (e.g. right after the view is opened).
+    fn scroll_lyrics_to_active(&self, index: usize) -> bool {
+        let handle = &self.lyrics_scroll_handle;
+        let viewport = handle.bounds();
+        if viewport.size.height <= px(1.0) || viewport.size.width <= px(1.0) {
+            return false;
+        }
+        let Some(line) = handle.bounds_for_item(index) else {
+            return false;
+        };
+
+        // Child bounds are content coordinates: the scroll offset is applied
+        // during paint, so it must not be added to the target again.
+        let target_top = viewport.top() + viewport.size.height * 0.32;
+        let y = target_top - line.top();
+        let min = -handle.max_offset().y;
+        let y = if y < min {
+            min
+        } else if y > px(0.0) {
+            px(0.0)
+        } else {
+            y
+        };
+        handle.set_offset(point(px(0.0), y));
+        true
+    }
+
+    /// Drop the cached NetEase result and look the current track up again.
+    pub fn refresh_lyrics(&mut self, cx: &mut Context<Self>) {
+        let Some(track) = self.current_track.clone() else {
+            return;
+        };
+
+        let path = crate::paths::lyrics_cache_path(track.id);
+        if let Err(err) = std::fs::remove_file(&path)
+            && err.kind() != std::io::ErrorKind::NotFound
+        {
+            crate::log_warn!("failed to remove lyrics cache {}: {}", path.display(), err);
+        }
+
+        self.lyrics_track_id = None;
+        self.lyrics_loading = false;
+        self.load_lyrics_for_current(cx);
+        cx.notify();
+    }
+
+    /// Seek to a synced lyric line; start playback if the engine is idle.
+    pub fn play_lyric_line(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(seconds) = self
+            .lyrics
+            .as_ref()
+            .and_then(|lyrics| lyrics.line_time(index))
+            .map(|time| time.as_secs_f64())
+        else {
+            return;
+        };
+        if self.current_track.is_none() {
+            return;
+        }
+
+        if self.playback_state == PlaybackState::Stopped {
+            self.play_current_queue_from(seconds, cx);
+        } else {
+            self.seek_to(seconds, cx);
+        }
+        self.sync_lyrics_line(cx);
+        self.lyrics_scrolled_line = None;
+        self.follow_lyrics(cx);
     }
 
     // ── Preferences / Config ──
@@ -912,6 +1304,41 @@ impl PlayerApp {
             crate::log_error!("failed to save close_to_tray preference: {err}");
         }
         crate::log_info!("close_to_tray set to {enabled}");
+        cx.notify();
+    }
+
+    /// Enable or disable NetEase lookup for tracks without local lyrics.
+    ///
+    /// Cached results stay available either way; only new requests stop.
+    pub fn set_fetch_lyrics_online(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.update_config(|config| config.fetch_lyrics_online = enabled);
+        crate::log_info!("fetch_lyrics_online set to {enabled}");
+
+        if enabled {
+            // Restart the current load: an in-flight local-only lookup could
+            // otherwise finish with no lyrics and never retry.
+            self.lyrics_track_id = None;
+            self.lyrics_loading = false;
+            self.load_lyrics_for_current(cx);
+        }
+
+        self.flush_config(cx);
+        cx.notify();
+    }
+
+    /// Enable or disable online cover art (NetEase, then iTunes).
+    pub fn set_fetch_covers_online(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.update_config(|config| config.fetch_covers_online = enabled);
+        crate::log_info!("fetch_covers_online set to {enabled}");
+
+        if enabled {
+            if let Some(track_id) = self.current_track.as_ref().map(|track| track.id) {
+                self.cover_attempts.remove(&track_id);
+            }
+            self.load_cover_for_current(cx);
+        }
+
+        self.flush_config(cx);
         cx.notify();
     }
 
@@ -1012,6 +1439,179 @@ impl PlayerApp {
         self.load_playlists();
         self.add_to_playlist_track = None;
         cx.notify();
+    }
+
+    // ── Tag / metadata editing ──
+
+    /// Open the metadata editor for `track`.
+    ///
+    /// Tag parsing is synchronous but skips cover art and audio properties, so
+    /// it stays cheap even for files carrying multi-megabyte artwork.
+    pub fn open_tag_editor(
+        &mut self,
+        track: Arc<Track>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let (tags, error) = match crate::tags::read(&track.path) {
+            Ok(tags) => (tags, None),
+            Err(err) => {
+                crate::log_warn!("failed to read tags of {}: {err:#}", track.path.display());
+                (
+                    EditableTags::from_track(&track),
+                    Some(format!("读取标签失败，已回退到曲库缓存：{err:#}")),
+                )
+            }
+        };
+
+        let title = tag_input(window, cx);
+        let artist = tag_input(window, cx);
+        let album = tag_input(window, cx);
+        let album_artist = tag_input(window, cx);
+        let genre = tag_input(window, cx);
+        let year = tag_input(window, cx);
+        let track_number = tag_input(window, cx);
+        let disc_number = tag_input(window, cx);
+
+        for (input, value) in [
+            (&title, tags.title.as_str()),
+            (&artist, tags.artist.as_str()),
+            (&album, tags.album.as_str()),
+            (&album_artist, tags.album_artist.as_str()),
+            (&genre, tags.genre.as_str()),
+            (&year, tags.year.as_str()),
+            (&track_number, tags.track.as_str()),
+            (&disc_number, tags.disc.as_str()),
+        ] {
+            input.update(cx, |state, cx| state.set_value(value, window, cx));
+        }
+
+        // Put the caret in the title field so typing works without an extra
+        // click. The modal hands root focus back when it closes.
+        let title_focus = title.read(cx).focus_handle(cx);
+        window.focus(&title_focus, cx);
+
+        self.tag_edit = Some(TagEditState {
+            track_id: track.id,
+            path: track.path.clone(),
+            title,
+            artist,
+            album,
+            album_artist,
+            genre,
+            year,
+            track_number,
+            disc_number,
+            error,
+            saving: false,
+        });
+        cx.notify();
+    }
+
+    /// Write the open editor back to the file on the background executor, then
+    /// refresh the track from disk.
+    pub fn save_tag_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(edit) = self.tag_edit.as_ref() else {
+            return;
+        };
+        if edit.saving {
+            return;
+        }
+
+        let tags = EditableTags {
+            title: edit.title.read(cx).value().to_string(),
+            artist: edit.artist.read(cx).value().to_string(),
+            album: edit.album.read(cx).value().to_string(),
+            album_artist: edit.album_artist.read(cx).value().to_string(),
+            genre: edit.genre.read(cx).value().to_string(),
+            year: edit.year.read(cx).value().to_string(),
+            track: edit.track_number.read(cx).value().to_string(),
+            disc: edit.disc_number.read(cx).value().to_string(),
+        };
+        let path = edit.path.clone();
+        let display_path = path.display().to_string();
+        let track_id = edit.track_id;
+
+        if let Some(edit) = self.tag_edit.as_mut() {
+            edit.saving = true;
+            edit.error = None;
+        }
+        cx.notify();
+
+        cx.spawn_in(window, async move |entity, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::tags::write(&path, &tags)?;
+                    crate::audio::decoder::read_metadata(&path, track_id)
+                })
+                .await;
+
+            let _ = entity.update_in(cx, |this, window, cx| {
+                match result {
+                    Ok(track) => {
+                        crate::log_info!("updated tags of {display_path}");
+                        this.tag_edit = None;
+                        this.apply_updated_track(track);
+                        // Restore the root focus handle; otherwise global
+                        // shortcuts die with the modal's inputs.
+                        window.focus(&this.focus_handle, cx);
+                    }
+                    Err(err) => {
+                        crate::log_error!("failed to save tags of {display_path}: {err:#}");
+                        if let Some(edit) = this.tag_edit.as_mut() {
+                            edit.saving = false;
+                            edit.error = Some(format!("保存失败：{err:#}"));
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Dismiss the metadata editor without writing.
+    pub fn close_tag_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.tag_edit.as_ref().is_some_and(|edit| edit.saving) {
+            return;
+        }
+        self.tag_edit = None;
+        // Closing the modal drops its inputs; hand focus back to the root view
+        // so global shortcuts keep working.
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
+    }
+
+    /// Swap in metadata re-read from disk after an edit.
+    fn apply_updated_track(&mut self, updated: Arc<Track>) {
+        if let Some(index) = self.library.iter().position(|track| track.id == updated.id) {
+            self.library[index] = updated.clone();
+        }
+
+        // Keep the scan order (album, then track number) after an edit, so
+        // All Music and the album detail views stay consistent. Unlike
+        // `apply_filter`, this does not jump the list back to the top.
+        self.library.sort_by(|a, b| {
+            a.album
+                .cmp(&b.album)
+                .then(a.track_number.cmp(&b.track_number))
+        });
+        self.filtered_indices = self.compute_filter();
+
+        for track in &mut self.queue {
+            if track.id == updated.id {
+                *track = updated.clone();
+            }
+        }
+        if self
+            .current_track
+            .as_ref()
+            .is_some_and(|track| track.id == updated.id)
+        {
+            self.current_track = Some(updated.clone());
+        }
+        self.selected_track_id = Some(updated.id);
     }
 
     #[allow(dead_code)] // wired by the playlist detail view (P2)
@@ -1126,6 +1726,8 @@ impl PlayerApp {
         self.position = self.config.last_position.clamp(0.0, self.duration);
         self.current_track = Some(current);
         self.playback_state = PlaybackState::Paused;
+        self.load_lyrics_for_current(cx);
+        self.load_cover_for_current(cx);
         crate::log_info!(
             "restored session at {:.1}s ({} queue items)",
             self.position,
@@ -1235,6 +1837,11 @@ impl PlayerApp {
         self.music_dirs.retain(|p| p != path);
         self.rescan(cx);
     }
+}
+
+/// Clamp a playback position before converting it to a `Duration`.
+fn duration_from_secs(seconds: f64) -> Duration {
+    Duration::try_from_secs_f64(seconds).unwrap_or_default()
 }
 
 impl Focusable for PlayerApp {

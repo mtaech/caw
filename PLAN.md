@@ -568,3 +568,107 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
   `Installed-Size`（按 staging 目录计算）。
 - 每次打包为 deb / tarball / AppImage 统一生成同名 `.sha256`，方便发布校验。
 - 本机没有 `rpmbuild`，`.rpm` 由 CI（`.github/workflows/build-rpm.yml`）产出。
+
+### 正在播放页：大封面 + 歌词（2026-10-22）
+
+- 新增 `src/lyrics.rs`：按需加载当前曲目的歌词，不进入扫描、不常驻全库。
+  来源优先级：音频同目录的 `.lrc`（`.lrc` / `.LRC` / `.Lrc`）→ 音频内嵌标签
+  （ID3 `USLT`、Vorbis `LYRICS`）。解析支持 `[mm:ss]`、`[mm:ss.xx]`、一行多时间戳、
+  `[offset:+/-ms]`、`[ti:]/[ar:]` 等元数据；没有时间戳的文本按普通歌词显示。
+  文件编码支持 UTF-8、UTF-8 BOM、UTF-16 BOM 与 GBK。
+- 新增 `src/ui/content/now_playing.rs`：左侧自适应宽度的大封面（无封面沿用确定性渐变占位），
+  右侧曲目信息 + 歌词列。同步歌词高亮当前行并自动滚动到视口约 1/3 处；点击任意带时间戳
+  的歌词行会 seek 到该时间，停止状态下从该时间开始播放。
+- 入口：点击播放栏封面、播放栏麦克风按钮、`L` 快捷键；`Esc`、「返回」、任意侧栏导航或
+  「定位到正在播放」都会离开该页。播放栏封面改用 `img(PathBuf)`（此前传 `String`
+  会走 AssetSource，导致播放栏封面不显示）。
+- 线程隔离：歌词读取/解析在后台 executor 完成；`lyrics_track_id` 丢弃旧曲目的迟到结果。
+  UI 每 250ms 根据 `position` 推进高亮行，并只在行号变化时重排滚动。
+- 验证：3 项 LRC 解析单测（`cargo test --bin caw lyrics::`）、亮色主题实机截图
+  （大封面、同步高亮、自动滚动、播放栏按钮）；`cargo fmt`、
+  `cargo clippy --all-targets`、`cargo check --all-targets` 通过。
+
+### 在线歌词：网易云（个人自用，2026-10-22）
+
+- 本项目自用、不分发，因此直接使用网易云网页接口；不引入 LRCLIB 等其它在线源。
+  接口：`/api/search/get/web` 搜索，`/api/song/lyric` 取 LRC。请求带
+  `User-Agent: Caw/<version>` 与 `Referer: https://music.163.com/`。
+- 加载顺序：同名 `.lrc` → 内嵌标签 → `~/.config/caw/lyrics/<track-id>.lrc` 缓存 →
+  网易云搜索。设置页新增「在线获取（网易云）/ 仅本地」，默认开启；关闭后仍使用已有缓存。
+- 匹配：标题/歌手先做去标点、忽略大小写归一化；括号内容（Live/Remastered 等）只作为
+  base 标题匹配的降权项；时长差 ≤2s 加分、>20s 直接淘汰；歌手不匹配时要求时长近乎一致。
+  最多尝试 3 个候选，取第一个有歌词的结果。
+- 线程/限流：`ureq` 阻塞请求全部在后台 executor；单请求 8s 超时，请求间 120ms 间隔，
+  只查当前曲目，不批量扫描。结果写入 `~/.config/caw/lyrics/`，二次播放/离线直接读缓存。
+- 播放页歌词标题右侧有「重新获取」按钮（仅在线结果/无结果时显示），会删掉该曲缓存并重查。
+- 歌词文本会合并连续空格（网易云部分 LRC 用双空格排版），并丢弃带时间戳的空行，
+  避免高亮行出现空白条。
+- 验证：`cargo test --bin caw lyrics::`（LRC 解析 + 标题归一化 + 匹配打分）、实机确认
+  `They Don't Care About Us`、`You Are Not Alone` 均能从网易云取到同步歌词并缓存。
+
+### 无边框窗口 + 精简侧栏（2026-10-22）
+
+- 移除应用内整条自定义 TitleBar。窗口改为客户端装饰（`WindowDecorations::Client`），
+  窗口创建后再调用一次 `window.request_decorations(Client)`，避免 KWin 在首帧仍按旧模式
+  绘制原生标题栏。
+- 顶部保留一条 34px 不透明 `TitleBar`：左侧只有应用名“Caw”，右侧是最小化/最大化/关闭；
+  整条标题栏负责拖动/双击最大化。
+- 侧栏头部（logo + “Caw / 本地音乐播放器”文案）整体移除，导航从侧栏顶部开始；
+  “全部音乐”导航图标从 app logo 改为音符（`CawIcon::Music`）。
+- 关闭行为不变：悬浮关闭按钮和系统关闭请求都走原来的关闭确认/最小化到托盘逻辑。
+
+### 0.6.0 发布（2026-10-22）
+
+- 版本从 0.5.2 升到 **0.6.0**；设置页“关于”的版本改为读取 `CARGO_PKG_VERSION`，不再写死。
+- 本版本包含：正在播放页（大封面 + 同步歌词）、网易云在线歌词与本地缓存、
+  无边框窗口 + 34px 简约顶栏（名称 + 窗口按钮）、侧栏去除 logo/名称、“全部音乐”音符图标、
+  网易云/iTunes 在线封面。
+- 打包：`./scripts/package.sh all` 产出 deb / AppImage / tar.gz；本机没有 `rpmbuild`，
+  rpm 由 CI 产出。
+
+### 性能：曲目表与队列虚拟化（2026-10-22）
+
+- 曲目表（全部音乐 / 艺术家 / 专辑 / 歌单详情）改用 GPUI `uniform_list`：只布局和绘制
+  可见行（约 15 行），621 首歌曲的列表滚动成本与 20 首相当。行高固定 38px，
+  表头/页面标题固定，列表自身滚动。
+- 队列抽屉同样改为 `uniform_list`，只渲染可见队列行；最近播放历史拆成底部的独立
+  滚动区（最多 20 条），不再把 600+ 队列行一次性塞进一个 `v_flex`。
+- “定位到正在播放”改用 `UniformListScrollHandle::scroll_to_item_with_offset`；
+  浮动按钮的可见性根据列表的 offset/viewport 计算。切换视图、详情、搜索过滤时列表回到顶部；
+  打开队列时自动居中当前曲目。
+- 250ms 的进度轮询仍会通知根视图，但列表只重建可见行，避免每次 tick 重建 600+ 行。
+- 验证：621 首曲库下曲目表/队列滚动、搜索过滤、定位正在播放均正常；
+  `cargo fmt` / `cargo clippy --all-targets` / `cargo check --all-targets` 通过。
+
+### 在线封面：网易云优先，iTunes 备选（2026-10-22）
+
+- 无内嵌封面且无缓存时，后台拉取：网易云 `/api/song/detail` → `album.picUrl`
+  （追加 `?param=600y600`）；失败再走 iTunes Search（`entity=song`，先 `country=us`
+  再 `tw`，`artworkUrl100` 换成 `600x600bb`）。
+- 搜索/打分与歌词共用 `src/netease.rs`；对 `Artist - Title` 文件名或缺少 artist 标签的
+  曲目，派生匹配用的 artist/title（例如 `008.陶喆 - 宫保鸡丁` → 陶喆 / 宫保鸡丁），
+  界面显示仍是原始文件名。顺带改善这类曲目的歌词匹配。
+- 缓存 `~/.config/caw/covers/<track-id>.jpg`；先写 `.jpg.tmp` 再 rename；
+  `paths::get_or_save_cover` 先查缓存文件，播放栏、正在播放页、专辑网格自动使用。
+  每首每会话最多尝试一次，失败不反复请求。
+- 设置 → 封面：在线获取（网易云 → iTunes）/仅本地，默认开启。
+- 验证：`008.陶喆 - 宫保鸡丁`（Unknown Artist，270s）网易云返回 464KB 封面并缓存；
+  `In the Closet` 走 iTunes 返回 202KB；单元测试覆盖文件名拆分与 iTunes 打分。
+
+### 标签元数据编辑（Lofty，2026-10-22）
+
+- 选型：Symphonia 只读，写入交给 [Lofty](https://github.com/Serial-ATA/lofty-rs) 0.25
+  （MIT/Apache-2.0、纯 Rust、MSRV 1.89；无 C/C++ 依赖，不引入 TagLib）。它同时覆盖
+  MP3/WAV/AIFF 的 ID3v2、FLAC/Ogg 的 Vorbis Comments、MP4 的 ilst，与现有扫描格式一致。
+- 新增 `src/tags.rs`：`read` 只解析文本（跳过封面与音频属性，打开编辑器不卡顿）；
+  `write` 按默认 `ParseOptions` 重新解析（**必须读到封面**，因为标签是整体重编码的），
+  修改标题/艺术家/专辑/专辑艺术家/流派/年份/音轨/碟号后原地写回。空字段删除对应帧；
+  音轨号/碟号支持 `3/12`；年份保留原有的月/日。
+- ID3v2 版本：读文件头，原 2.3 继续写 2.3、原 2.4 继续写 2.4；无标签的 MP3 默认 2.3
+  （老车机/扫描器兼容性更好）。实测 2.3 文件改写后仍是 2.3，内嵌封面与其它帧保留。
+- UI：曲目行新增铅笔按钮，打开「编辑音乐标签」模态（root_view 统一渲染）；保存走后台
+  executor，完成后只重读该曲目、重排曲库并替换队列/当前曲目中的副本，不整库重扫。
+  Esc / 取消关闭；关闭后把焦点交还根视图，避免全局快捷键失效。
+- 验证：真实 MP3（ID3v2.3 + 内嵌封面）改写后 ffprobe 字段正确、封面仍在、可正常解码；
+  无标签 MP3 会新建 2.3 标签；FLAC 走 Vorbis Comments；清空字段会删除帧。
+  `cargo fmt` / `cargo clippy --all-targets` / `cargo check --all-targets` 通过。

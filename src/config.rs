@@ -62,6 +62,10 @@ pub struct AppConfig {
     pub playback_mode: PlaybackMode,
     /// Close button hides to the tray instead of quitting (used once a tray exists).
     pub close_to_tray: bool,
+    /// Fetch lyrics from NetEase when the file has no local lyrics.
+    pub fetch_lyrics_online: bool,
+    /// Fetch missing cover art online (NetEase, then iTunes).
+    pub fetch_covers_online: bool,
     /// Last window geometry, restored on startup when present.
     pub window_bounds: Option<WindowBounds>,
     /// Unix timestamp (seconds) of the last completed library scan.
@@ -92,6 +96,10 @@ impl Default for AppConfig {
             // No tray exists until the platform phase, so hiding on close would
             // strand the app in the background; default to a normal close.
             close_to_tray: false,
+            // Personal builds want lyrics without extra setup; the setting can
+            // still be turned off for offline-only use.
+            fetch_lyrics_online: true,
+            fetch_covers_online: true,
             window_bounds: None,
             last_scan_time: None,
             last_track_path: None,
@@ -212,6 +220,8 @@ mod tests {
             volume: 0.35,
             playback_mode: PlaybackMode::Shuffle,
             close_to_tray: true,
+            fetch_lyrics_online: false,
+            fetch_covers_online: false,
             window_bounds: Some(WindowBounds {
                 x: 10.0,
                 y: 20.0,

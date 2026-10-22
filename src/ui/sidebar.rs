@@ -1,12 +1,12 @@
 //! Left navigation sidebar: library views, playlists, and scan status.
 
-use gpui_kit::base::{StyledExt as _, h_flex, v_flex};
+use gpui_kit::base::h_flex;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::sidebar::{
     Sidebar, SidebarFooter, SidebarGroup, SidebarMenu, SidebarMenuItem,
 };
-use gpui_kit::component::{ActiveTheme, Icon, Sizable};
+use gpui_kit::component::{ActiveTheme, Sizable};
 use gpui_kit::*;
 
 use crate::app::{DetailTarget, NavItem, PlayerApp};
@@ -29,50 +29,12 @@ pub fn render_sidebar(
     Sidebar::new("caw-sidebar")
         .w(SIDEBAR_WIDTH)
         .collapsible(false)
-        .header(
-            h_flex()
-                .w_full()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .size_8()
-                        .flex_shrink_0()
-                        .rounded_md()
-                        .bg(rgb(0xffffff))
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(Icon::new(CawIcon::App).size_6()),
-                )
-                .child(
-                    v_flex()
-                        .gap_0()
-                        .overflow_hidden()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_semibold()
-                                .text_color(cx.theme().foreground)
-                                .child("Caw"),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .truncate()
-                                .child("本地音乐播放器"),
-                        ),
-                ),
-        )
         .child(
             SidebarGroup::new("资料库").child(
                 SidebarMenu::new()
                     .child(nav_item(
                         "全部音乐",
-                        CawIcon::App,
+                        CawIcon::Music,
                         NavItem::AllMusic,
                         selected_nav,
                         &entity,

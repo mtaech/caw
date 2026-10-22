@@ -1,6 +1,6 @@
 [package]
 name = "caw"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2024"
 
 [dependencies]
@@ -8,6 +8,10 @@ gpui-kit = "0.7.0"
 
 # Audio decoding
 symphonia = { version = "0.5", features = ["all-codecs", "all-formats"] }
+
+# Tag editing (read/write ID3v2, Vorbis comments, MP4 ilst, APE).
+# Symphonia stays read-only, so writes go through Lofty.
+lofty = "0.25"
 
 # Audio output (Linux: ALSA backend -> PipeWire)
 cpal = "0.18"
@@ -17,6 +21,8 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Utilities
 crossbeam-channel = "0.5"
+# Online lyrics (NetEase): small blocking client, used on the background executor
+ureq = "3"
 walkdir = "2"
 dirs = "5"
 image = "0.25"

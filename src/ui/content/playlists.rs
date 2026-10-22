@@ -42,12 +42,13 @@ pub(super) fn render_playlists(
             let pl_name_for_delete = pl.name.clone();
 
             return v_flex()
-                .w_full()
+                .size_full()
                 .gap_4()
                 .child(
                     h_flex()
                         .w_full()
                         .h(px(72.))
+                        .flex_shrink_0()
                         .items_center()
                         .gap_4()
                         .child({

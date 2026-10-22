@@ -12,7 +12,7 @@ GPU 加速渲染，音频由 Symphonia 解码、cpal 输出。
 
 - 🎵 **多格式支持** — FLAC / MP3 / WAV / Ogg / AAC / ALAC（Symphonia 解码）
 - 📂 **多目录音乐库** — 系统原生文件夹选择器（xdg-desktop-portal），多目录去重，后台扫描不卡 UI
-- 🎨 **GPU 界面** — 自定义无边框标题栏、亮/暗主题、字体切换、暗色配色
+- 🎨 **GPU 界面** — 无边框窗口 + 34px 简约顶栏（应用名 + 窗口按钮）、亮/暗主题、字体切换
 - 📋 **播放队列** — 队列抽屉、跳播、清空；（拖拽排序/历史待办，见 PLAN.md）
 - 🔀 **播放模式** — 顺序 / 随机 / 列表循环 / 单曲循环
 - 📻 **持久化播放列表** — 基于本地 SQLite 安全存储，支持创建/删除/加歌/移除
@@ -23,6 +23,9 @@ GPU 加速渲染，音频由 Symphonia 解码、cpal 输出。
 - 🖥️ **系统托盘** — StatusNotifierItem + DBusMenu（zbus 手写实现）：正在播放信息行、播放/暂停、上下首、音量与播放模式子菜单、显示/退出；关闭窗口可最小化到托盘（KDE 下同时从任务栏隐藏，其他 Wayland 桌面仅最小化）
 - 🖱️ **双击播放** — 全部音乐 / 歌单 / 专辑 / 艺术家列表双击切歌，当前播放行高亮
 - 🎯 **定位正在播放** — 滚出视野时右下角浮出「正在播放」按钮，点击即可滚回；点左下角歌名同样可定位（自动切换视图/清空搜索）
+- 🖼️ **正在播放页** — 大封面 + 歌词：本地 `.lrc`/内嵌标签优先，找不到时自动从网易云获取（可在设置中关闭）；同步歌词随播放高亮并自动滚动，点击歌词行可跳播
+- 🌐 **在线封面** — 无内嵌封面时优先网易云、iTunes 备选，缓存到 `~/.config/caw/covers/`（可在设置中关闭）
+- 🏷️ **标签编辑** — 曲目行铅笔按钮修改标题 / 艺术家 / 专辑 / 专辑艺术家 / 流派 / 年份 / 音轨号 / 碟号，写回文件标签（保留内嵌封面与其它帧；MP3 保持原有 ID3v2.3/2.4 版本）
 - ⌨️ **键盘快捷键** — 空格播放/暂停，←/→ 上下首，↑/↓ 音量（输入时自动让位）
 
 ## 技术栈
@@ -32,6 +35,7 @@ GPU 加速渲染，音频由 Symphonia 解码、cpal 输出。
 | **GUI** | [gpui-kit](https://gpui-kit.com) 0.7（GPUI + gpui-component） | 单一 Rust GUI 依赖，GPU 渲染 |
 | **音频解码** | [Symphonia](https://github.com/pdeljanov/Symphonia) | 纯 Rust 多格式解码 |
 | **音频输出** | [cpal](https://github.com/RustAudio/cpal) | Linux: ALSA / PipeWire |
+| **标签编辑** | [Lofty](https://github.com/Serial-ATA/lofty-rs) | 纯 Rust 读写 ID3v2 / Vorbis Comments / MP4 ilst |
 | **本地存储** | SQLite ([rusqlite](https://github.com/rusqlite/rusqlite)) | 播放列表、音乐目录 |
 | **偏好配置** | `~/.config/caw/config.json`（serde） | 主题、字体、音量、会话恢复 |
 | **系统集成** | [zbus](https://github.com/dbus2/zbus) | Linux MPRIS + 系统托盘（StatusNotifierItem / DBusMenu） |
@@ -68,7 +72,8 @@ cargo build --release           # 发布构建（target/release/caw）
 | `config.json` | 偏好与上次播放会话 |
 | `caw.db` | SQLite：歌单、音乐目录 |
 | `caw.log`（及 `.1`…`.5`） | 日志，2 MiB 轮转，控制台保留 `caw: ` 前缀 |
-| `covers/` | 从音频标签提取的封面缓存 |
+| `covers/` | 内嵌/在线封面缓存（按曲目 id 的 `.jpg`） |
+| `lyrics/` | 网易云歌词缓存（按曲目 id 的 `.lrc`，离线可用） |
 
 ## 快捷键
 
@@ -77,6 +82,8 @@ cargo build --release           # 发布构建（target/release/caw）
 | Space | 播放 / 暂停 |
 | ← / → | 上一首 / 下一首 |
 | ↑ / ↓ | 音量 +5% / -5% |
+| L | 显示 / 隐藏正在播放页（大封面 + 歌词） |
+| Esc | 关闭正在播放页 |
 
 输入框聚焦或对话框打开时，以上快捷键不会抢占按键。
 

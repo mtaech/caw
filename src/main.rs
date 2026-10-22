@@ -5,17 +5,21 @@ mod app;
 mod assets;
 mod audio;
 mod config;
+mod covers;
 mod db;
+mod lyrics;
 mod models;
+mod netease;
 mod paths;
 mod platform;
 mod root_view;
+mod tags;
 mod ui;
 
 use std::time::Duration;
 
 use gpui_kit::component::scroll::ScrollbarMode;
-use gpui_kit::component::{ActiveTheme, Root, Theme, TitleBar};
+use gpui_kit::component::{ActiveTheme, Root, Theme};
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
@@ -40,32 +44,38 @@ fn main() {
             let window_bounds = platform::window_state::load()
                 .map(|state| state.to_window_bounds())
                 .unwrap_or_else(|| WindowBounds::centered(size(px(1080.), px(720.)), cx));
-            let mut window_options = WindowOptions {
+            let window_options = WindowOptions {
                 window_bounds: Some(window_bounds),
                 window_min_size: Some(size(px(860.), px(540.))),
                 // Wayland app_id / X11 WM_CLASS: compositors use it to match the
                 // .desktop entry, which is where the taskbar/dock icon comes from.
                 app_id: Some("caw".to_owned()),
-                ..TitleBar::window_options()
+                // Caw draws its own 34px title bar (name + window controls), so
+                // the window is client-decorated.
+                window_decorations: Some(WindowDecorations::Client),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Caw".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
             };
-            window_options.titlebar = Some(TitlebarOptions {
-                title: Some("Caw".into()),
-                ..TitleBar::title_bar_options()
-            });
             let root_background = cx.theme().background;
 
             cx.open_window(window_options, |window, cx| {
                 let view = cx.new(|cx| PlayerApp::new(window, cx));
+                // Re-assert client-side decorations once the surface exists: the
+                // app owns the full window and draws its own title bar.
+                window.request_decorations(WindowDecorations::Client);
 
                 // Start keyboard focus on the app view so transport shortcuts work
                 // before the user clicks anything.
                 let focus_handle = view.read(cx).focus_handle.clone();
                 window.focus(&focus_handle, cx);
 
-                // Platform close requests (window-manager X, Alt+F4, session close)
-                // must follow the same preference as the in-app title bar: either
-                // minimize to tray or ask before quitting. Returning false keeps the
-                // window alive; only the confirm dialog's OK actually quits.
+                // Platform close requests (title-bar close button, window-manager
+                // X, Alt+F4, session close) either minimize to tray or ask before
+                // quitting. Returning false keeps the window alive; only the
+                // confirm dialog's OK actually quits.
                 {
                     let close_entity = view.clone();
                     window.on_window_should_close(cx, move |window, cx| {

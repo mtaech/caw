@@ -82,6 +82,23 @@ div().truncate()                                       // gpui Styled
 - `h_flex()` centers on the cross axis; `v_flex()` does not stretch. Give full-height children
   `h_full()` or set `items_start` when a header/footer/scroll region must resolve against the
   parent height.
+- `ScrollHandle::bounds_for_item(i)` records one bound per **direct child** of a tracked scroll
+  container, so auto-scroll can center row `i`. Those bounds are content coordinates: the
+  scroll offset is applied during paint and is *not* included, so a target is
+  `viewport.top() - bounds.top()` (never `offset + delta`). Add the
+  `vertical_scrollbar(&handle)` layer **after** the data rows: it becomes a child too, and
+  adding it first shifts every row index by one (the lyrics view hit this).
+- `uniform_list(id, item_count, |range, window, cx| Vec<_>)` renders only the visible
+  range and measures the first item for a uniform row height. Bind it with
+  `.track_scroll(&UniformListScrollHandle)` inside a `relative flex_1 min_h_0` container and
+  overlay `Scrollbar::vertical(&handle).id(..).viewport_from_layout()`. The handle's public
+  `base_handle` exposes bounds/offset for "is row N visible" checks; use
+  `scroll_to_item_with_offset(row, ScrollStrategy::Top, 1)` to locate a row.
+- Custom window chrome: set `WindowDecorations::Client` and call
+  `window.request_decorations(WindowDecorations::Client)` after the surface exists; on KWin
+  the creation-time request can otherwise leave the native title bar in place (or a stale
+  server/client mode). A `TitleBar`'s `.absolute()` style is applied to its **inner** bar, not
+  the outer `flex_shrink_0` wrapper — wrap it in a positioned `div` when overlaying controls.
 - Raw hex/rgb is discouraged; use theme tokens. If a literal is unavoidable, use
   `gpui::hsla(...)` / `rgba()`, never a string hex.
 

@@ -1,15 +1,18 @@
 //! Playback queue drawer: current queue, save-as-playlist and play history.
 
+use std::sync::Arc;
+
 use gpui_kit::base::{StyledExt as _, h_flex, v_flex};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::dialog::DialogButtonProps;
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::scroll::{ScrollableElement as _, Scrollbar};
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, WindowExt};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::app::PlayerApp;
+use crate::models::track::Track;
 use crate::ui::icons::CawIcon;
 
 pub(super) fn render_queue_drawer(
@@ -86,113 +89,160 @@ pub(super) fn render_queue_drawer(
                         }),
                 ),
         )
+        .child({
+            let queue = Arc::new(app.queue.clone());
+            let list_entity = entity.clone();
+            let list_queue = queue.clone();
+            let rows = uniform_list("queue-list", queue.len(), move |range, _window, cx| {
+                range
+                    .map(|ix| {
+                        let Some(track) = list_queue.get(ix).cloned() else {
+                            return div().into_any_element();
+                        };
+                        let is_cur = cur_idx == Some(ix);
+                        let row_entity = list_entity.clone();
+
+                        h_flex()
+                            .w_full()
+                            .h(px(52.))
+                            .px_2()
+                            .rounded_md()
+                            .items_center()
+                            .gap_2()
+                            .cursor_pointer()
+                            .bg(if is_cur {
+                                cx.theme().accent
+                            } else {
+                                gpui::transparent_black()
+                            })
+                            .hover(|s| s.bg(cx.theme().accent))
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                row_entity.update(cx, |this, cx| {
+                                    this.play_queue_index(ix, cx);
+                                });
+                            })
+                            .child(if is_cur {
+                                Icon::new(CawIcon::Volume2)
+                                    .size_4()
+                                    .text_color(cx.theme().primary)
+                                    .into_any_element()
+                            } else {
+                                div()
+                                    .w(px(16.))
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(format!("{}", ix + 1))
+                                    .into_any_element()
+                            })
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .gap_0()
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_medium()
+                                            .truncate()
+                                            .text_color(if is_cur {
+                                                cx.theme().primary
+                                            } else {
+                                                cx.theme().foreground
+                                            })
+                                            .child(track.display_title().to_string()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .truncate()
+                                            .child(track.display_artist().to_string()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_family(cx.theme().mono_font_family.clone())
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(track.duration_formatted()),
+                            )
+                            .into_any_element()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .track_scroll(&app.queue_scroll_handle)
+            .w_full()
+            .h_full();
+
+            div()
+                .relative()
+                .flex_1()
+                .min_h(px(0.))
+                .p_2()
+                .child(rows)
+                .child(
+                    div().absolute().inset_0().child(
+                        Scrollbar::vertical(&app.queue_scroll_handle)
+                            .id("queue-scrollbar")
+                            .viewport_from_layout(),
+                    ),
+                )
+        })
+        .child(render_queue_history(app, &entity, &history, cx))
+}
+
+fn render_queue_history(
+    app: &PlayerApp,
+    entity: &Entity<PlayerApp>,
+    history: &[Arc<Track>],
+    cx: &mut Context<PlayerApp>,
+) -> impl IntoElement {
+    let theme = cx.theme();
+
+    v_flex()
+        .w_full()
+        .flex_shrink_0()
+        .p_2()
+        .gap_2()
+        .border_t_1()
+        .border_color(theme.border)
+        .child(
+            h_flex()
+                .w_full()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_semibold()
+                        .text_color(theme.muted_foreground)
+                        .child("最近播放"),
+                )
+                .child({
+                    let ent = entity.clone();
+                    Button::new("btn-clear-history")
+                        .ghost()
+                        .xsmall()
+                        .label("清除")
+                        .on_click(move |_, _, cx| {
+                            ent.update(cx, |this, cx| {
+                                this.clear_history(cx);
+                            });
+                        })
+                }),
+        )
         .child(
             div()
-                .id("queue-scroll")
-                .flex_1()
-                .overflow_y_scrollbar()
-                .p_2()
+                .id("queue-history-scroll")
+                .w_full()
+                .max_h(px(180.))
+                .overflow_y_scroll()
+                .track_scroll(&app.queue_history_scroll_handle)
+                .vertical_scrollbar(&app.queue_history_scroll_handle)
                 .child(
                     v_flex()
+                        .w_full()
                         .gap_1()
-                        .children(app.queue.iter().enumerate().map(|(ix, t)| {
-                            let is_cur = cur_idx == Some(ix);
-
-                            h_flex()
-                                .w_full()
-                                .p_2()
-                                .rounded_md()
-                                .items_center()
-                                .gap_2()
-                                .cursor_pointer()
-                                .bg(if is_cur {
-                                    theme.accent
-                                } else {
-                                    gpui::transparent_black()
-                                })
-                                .hover(|s| s.bg(theme.accent))
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(move |this, _, _, cx| {
-                                        this.play_queue_index(ix, cx);
-                                    }),
-                                )
-                                .child(if is_cur {
-                                    Icon::new(CawIcon::Volume2)
-                                        .size_4()
-                                        .text_color(theme.primary)
-                                        .into_any_element()
-                                } else {
-                                    div()
-                                        .w(px(16.))
-                                        .text_xs()
-                                        .text_color(theme.muted_foreground)
-                                        .child(format!("{}", ix + 1))
-                                        .into_any_element()
-                                })
-                                .child(
-                                    v_flex()
-                                        .flex_1()
-                                        .overflow_hidden()
-                                        .gap_0()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .font_medium()
-                                                .truncate()
-                                                .text_color(if is_cur {
-                                                    theme.primary
-                                                } else {
-                                                    theme.foreground
-                                                })
-                                                .child(t.display_title().to_string()),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(theme.muted_foreground)
-                                                .truncate()
-                                                .child(t.display_artist().to_string()),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_family(theme.mono_font_family.clone())
-                                        .text_color(theme.muted_foreground)
-                                        .child(t.duration_formatted()),
-                                )
-                        }))
-                        // ── History ──
-                        .child(
-                            h_flex()
-                                .w_full()
-                                .mt_3()
-                                .pt_3()
-                                .border_t_1()
-                                .border_color(theme.border)
-                                .items_center()
-                                .justify_between()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_semibold()
-                                        .text_color(theme.muted_foreground)
-                                        .child("最近播放"),
-                                )
-                                .child({
-                                    let ent = entity.clone();
-                                    Button::new("btn-clear-history")
-                                        .ghost()
-                                        .xsmall()
-                                        .label("清除")
-                                        .on_click(move |_, _, cx| {
-                                            ent.update(cx, |this, cx| {
-                                                this.clear_history(cx);
-                                            });
-                                        })
-                                }),
-                        )
                         .when(history.is_empty(), |this| {
                             this.child(
                                 div()
@@ -203,41 +253,37 @@ pub(super) fn render_queue_drawer(
                                     .child("暂无播放历史"),
                             )
                         })
-                        .children(
-                            history
-                                .into_iter()
-                                .enumerate()
-                                .take(20)
-                                .map(|(idx, track)| {
-                                    h_flex()
-                                        .w_full()
-                                        .p_2()
-                                        .rounded_md()
-                                        .items_center()
-                                        .gap_2()
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(theme.accent))
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(move |this, _, _, cx| {
-                                                this.play_history_index(idx, cx);
-                                            }),
-                                        )
-                                        .child(
-                                            Icon::new(CawIcon::Music)
-                                                .size_3()
-                                                .text_color(theme.muted_foreground),
-                                        )
-                                        .child(
-                                            div()
-                                                .flex_1()
-                                                .text_xs()
-                                                .truncate()
-                                                .text_color(theme.foreground)
-                                                .child(track.display_title().to_string()),
-                                        )
-                                }),
-                        ),
+                        .children(history.iter().take(20).enumerate().map(|(idx, track)| {
+                            let ent = entity.clone();
+                            let track = track.clone();
+
+                            h_flex()
+                                .w_full()
+                                .p_2()
+                                .rounded_md()
+                                .items_center()
+                                .gap_2()
+                                .cursor_pointer()
+                                .hover(|s| s.bg(theme.accent))
+                                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                    ent.update(cx, |this, cx| {
+                                        this.play_history_index(idx, cx);
+                                    });
+                                })
+                                .child(
+                                    Icon::new(CawIcon::Music)
+                                        .size_3()
+                                        .text_color(theme.muted_foreground),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .text_xs()
+                                        .truncate()
+                                        .text_color(theme.foreground)
+                                        .child(track.display_title().to_string()),
+                                )
+                        })),
                 ),
         )
 }

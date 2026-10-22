@@ -171,6 +171,94 @@ pub(super) fn render_settings(
                         }),
                 ),
         )
+        // ── Lyrics ──
+        .child(
+            v_flex()
+                .gap_3()
+                .p_4()
+                .rounded_lg()
+                .border_1()
+                .border_color(theme.border)
+                .bg(theme.secondary)
+                .child(section(
+                    "歌词",
+                    "本地没有 .lrc 或内嵌歌词时，从网易云搜索并缓存到 ~/.config/caw/lyrics/",
+                ))
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child({
+                            let ent = entity.clone();
+                            choice_button(
+                                "btn-lyrics-online-on",
+                                "在线获取（网易云）",
+                                app.config.fetch_lyrics_online,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_fetch_lyrics_online(true, cx);
+                                });
+                            })
+                        })
+                        .child({
+                            let ent = entity.clone();
+                            choice_button(
+                                "btn-lyrics-online-off",
+                                "仅本地",
+                                !app.config.fetch_lyrics_online,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_fetch_lyrics_online(false, cx);
+                                });
+                            })
+                        }),
+                ),
+        )
+        // ── Covers ──
+        .child(
+            v_flex()
+                .gap_3()
+                .p_4()
+                .rounded_lg()
+                .border_1()
+                .border_color(theme.border)
+                .bg(theme.secondary)
+                .child(section(
+                    "封面",
+                    "无内嵌封面时在线获取，缓存到 ~/.config/caw/covers/；网易云优先，iTunes 备选",
+                ))
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child({
+                            let ent = entity.clone();
+                            choice_button(
+                                "btn-covers-online-on",
+                                "在线获取（网易云 → iTunes）",
+                                app.config.fetch_covers_online,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_fetch_covers_online(true, cx);
+                                });
+                            })
+                        })
+                        .child({
+                            let ent = entity.clone();
+                            choice_button(
+                                "btn-covers-online-off",
+                                "仅本地",
+                                !app.config.fetch_covers_online,
+                            )
+                            .on_click(move |_, _, cx| {
+                                ent.update(cx, |this, cx| {
+                                    this.set_fetch_covers_online(false, cx);
+                                });
+                            })
+                        }),
+                ),
+        )
         // ── Music directories ──
         .child(
             v_flex()
@@ -275,7 +363,7 @@ pub(super) fn render_settings(
                             div()
                                 .text_xs()
                                 .text_color(theme.muted_foreground)
-                                .child("版本: v0.5.1"),
+                                .child(format!("版本: v{}", env!("CARGO_PKG_VERSION"))),
                         )
                         .child(
                             div()

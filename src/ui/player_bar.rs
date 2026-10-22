@@ -16,8 +16,8 @@ use crate::ui::marquee::MarqueeText;
 const PLAYER_BAR_HEIGHT: Pixels = px(80.);
 /// Width of the fixed left (now playing) and right (volume/queue) clusters.
 const SIDE_CLUSTER_WIDTH: Pixels = px(280.);
-/// The right cluster also hosts locate + queue buttons, so it is wider.
-const RIGHT_CLUSTER_WIDTH: Pixels = px(324.);
+/// The right cluster also hosts locate + queue + lyrics buttons, so it is wider.
+const RIGHT_CLUSTER_WIDTH: Pixels = px(356.);
 /// Space left for the title inside the left cluster (cover + gap subtracted).
 const TITLE_WIDTH: Pixels = px(216.);
 
@@ -78,7 +78,20 @@ pub fn render_player_bar(
                 .flex_shrink_0()
                 .items_center()
                 .gap_3()
-                .child(cover_art(app, cx))
+                .child(
+                    div()
+                        .id("player-bar-cover")
+                        .flex_shrink_0()
+                        .cursor_pointer()
+                        .hover(|style| style.opacity(0.9))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, _, cx| {
+                                this.toggle_now_playing(cx);
+                            }),
+                        )
+                        .child(cover_art(app, cx)),
+                )
                 .child(
                     v_flex()
                         .id("now-playing-info")
@@ -223,6 +236,26 @@ pub fn render_player_bar(
                 .child({
                     let ent = entity.clone();
                     let has_track = app.current_track.is_some();
+                    let showing = app.show_now_playing;
+                    Button::new("btn-toggle-now-playing")
+                        .ghost()
+                        .small()
+                        .selected(showing)
+                        .toggled(showing)
+                        .icon(CawIcon::MicVocal)
+                        .tooltip(if showing {
+                            "隐藏正在播放（L）"
+                        } else {
+                            "显示正在播放：封面与歌词（L）"
+                        })
+                        .disabled(!has_track)
+                        .on_click(move |_, _, cx| {
+                            ent.update(cx, |this, cx| this.toggle_now_playing(cx));
+                        })
+                })
+                .child({
+                    let ent = entity.clone();
+                    let has_track = app.current_track.is_some();
                     Button::new("btn-locate-now-playing")
                         .ghost()
                         .small()
@@ -346,11 +379,7 @@ fn cover_art(app: &PlayerApp, cx: &mut Context<PlayerApp>) -> AnyElement {
             .overflow_hidden()
             .border_1()
             .border_color(cx.theme().border)
-            .child(
-                img(cover_path.to_string_lossy().to_string())
-                    .size_full()
-                    .object_fit(ObjectFit::Cover),
-            )
+            .child(img(cover_path).size_full().object_fit(ObjectFit::Cover))
             .into_any_element();
     }
 

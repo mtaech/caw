@@ -246,6 +246,14 @@ fn lyrics_from_revision(rev: &symphonia::core::meta::MetadataRevision) -> Option
 
 /// Fully decode an audio file into PCM f32 samples.
 pub fn decode_file(path: &Path) -> Result<DecodedAudio> {
+    decode_prefix(path, Duration::MAX)
+}
+
+/// Decode at most `max` worth of audio into PCM f32 samples.
+///
+/// Fingerprinting only needs the first couple of minutes, so decoding stops
+/// once the sample budget is covered instead of reading the whole file.
+pub fn decode_prefix(path: &Path, max: Duration) -> Result<DecodedAudio> {
     let src = File::open(path).context("Failed to open audio file")?;
     let mss = MediaSourceStream::new(Box::new(src), Default::default());
 
@@ -279,10 +287,23 @@ pub fn decode_file(path: &Path) -> Result<DecodedAudio> {
         .make(&audio_track.codec_params, &dec_opts)
         .context("Failed to create decoder")?;
 
+    // Sample budget: rate * channels * seconds, capped to `usize`.
+    let rate_channels = sample_rate as u64 * channels.max(1) as u64;
+    let budget: usize = if max == Duration::MAX {
+        usize::MAX
+    } else {
+        max.as_secs()
+            .saturating_mul(rate_channels)
+            .min(usize::MAX as u64) as usize
+    };
+
     let mut all_samples: Vec<f32> = Vec::new();
     let mut sample_buf: Option<SampleBuffer<f32>> = None;
 
     loop {
+        if all_samples.len() >= budget {
+            break;
+        }
         match format.next_packet() {
             Ok(packet) => {
                 if packet.track_id() != track_id {

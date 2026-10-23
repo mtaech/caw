@@ -11,6 +11,8 @@ GUI 用 `gpui-kit`（GPUI + gpui-component），音频解码用 Symphonia，输�
 - **GUI**: `gpui-kit = "0.7.0"`（crates.io，单一依赖；内含 GPUI / gpui-base / gpui-component / assets）。
   不要直接依赖 `gpui`、`gpui-component`：全部从 `gpui_kit` 命名空间导入。
 - **音频**: `symphonia` 解码（FLAC/MP3/WAV/Ogg/AAC/ALAC）→ `cpal` 输出（Linux ALSA/PipeWire）。
+- **指纹识别**: `rusty-chromaprint`（纯 Rust chromaprint 移植）+ AcoustID API；
+  可选，config.json 配 `acoustid_client` 后启用。
 - **存储**: SQLite（`rusqlite`，歌单/音乐目录）+ `~/.config/caw/config.json`（偏好与窗口状态）。
 - **平台**: Linux 优先；MPRIS 与系统托盘（StatusNotifierItem + com.canonical.dbusmenu）均直接用 zbus 实现（ksni 0.3.7 与 zbus 5.19 不兼容，未使用）。
 - **目标平台**: Linux（Fedora 开发）；CI 额外构建 Windows。无 Node/npm/Tauri 代码。
@@ -25,8 +27,8 @@ cargo clippy --all-targets# 风格/lint（提交前跑）
 cargo fmt                 # 格式化
 ```
 
-- 没有 GUI 自动化测试；`src/lyrics.rs` / `src/netease.rs` / `src/covers.rs` / `src/tags.rs`
-  含少量解析与匹配单测。
+- 没有 GUI 自动化测试；`src/lyrics.rs` / `src/netease.rs` / `src/lrclib.rs` /
+  `src/acoustid.rs` / `src/covers/` / `src/tags.rs` 含少量解析与匹配单测。
   不要为了让“测试通过”而编造无意义测试。GUI 用 `cargo run` 冒烟。
 - 运行产物与日志：`~/.config/caw/`（`config.json`、`caw.db`、`caw.log`、`covers/`）。
 - 提交前必须：`cargo fmt`、`cargo clippy --all-targets`（0 error）、`cargo check --all-targets`。
@@ -45,9 +47,16 @@ cargo fmt                 # 格式化
   上次播放/队列快照等），原子写（tmp+rename）。
 - `logging.rs` — 文件日志 + 控制台（`log_info!` 等宏，保留 `caw: ` 前缀，2MiB×5 轮转）。
 - `db.rs` — SQLite：playlists / playlist_tracks / music_dirs / settings。
-- `lyrics.rs` — 当前曲目歌词：本地 `.lrc`/内嵌标签 → 网易云缓存 → 在线搜索；LRC 解析。
-- `netease.rs` — 网易云搜索/匹配（标题/歌手归一化、时长打分），歌词与封面共用。
-- `covers.rs` / `covers/itunes.rs` — 在线封面：网易云优先，iTunes 备选。
+- `lyrics.rs` — 当前曲目歌词：本地 `.lrc`/内嵌标签 → 在线缓存（带 `[source:...]` 标记）→
+  在线搜索（网易云 → LRCLIB → AcoustID 识别后重试）；LRC 解析。
+- `netease.rs` — 网易云搜索/匹配（标题/歌手归一化、时长打分）；`score_candidate`
+  匹配打分与匹配工具函数被各在线源共用。
+- `lrclib.rs` — LRCLIB 歌词源（免 key，同步/纯文本），网易云的补充，偏欧美/日文曲库。
+- `acoustid.rs` — AcoustID 指纹识别（rusty-chromaprint 纯 Rust 实现，TEST2 算法）；
+  需在 config.json 配 `acoustid_client`，空串即整体禁用。用于标签错误/缺失的文件：
+  识别出真实标题/歌手后重试歌词与封面，release-group MBID 可直接取封面。
+- `covers.rs` — 在线封面：网易云 → iTunes → MusicBrainz（Cover Art Archive）；
+  AcoustID 识别后重试。
 - `tags.rs` — 标签编辑（Lofty）：读写 MP3 ID3v2 / FLAC·Ogg Vorbis / MP4 ilst 的文本字段。
 - `audio/` — `library.rs`（walkdir 扫描去重）、`decoder.rs`（Symphonia 封装）、
   `player.rs`（cpal 输出线程 + `PlayerCommand`）。
@@ -82,11 +91,14 @@ cargo fmt                 # 格式化
   不要重新引入全量列表的 `ScrollHandle` 定位逻辑。
 - **封面加载**：`img(PathBuf)` 走文件系统；`img(String)` 会走 AssetSource 从而加载不到
   `~/.config/caw/covers/*.jpg`。
-- **在线歌词**：只在后台 executor 查当前曲目（网易云为非官方接口，自用）；本地 `.lrc`/内嵌标签
-  优先，结果缓存到 `~/.config/caw/lyrics/<track-id>.lrc`；禁止在渲染或扫描线程发请求。
-- **在线封面**：无内嵌/缓存封面时后台拉取（网易云优先，iTunes 备选），缓存到
+- **在线歌词**：只在后台 executor 查当前曲目（网易云为非官方接口，自用；LRCLIB 免 key 但限流）；
+  本地 `.lrc`/内嵌标签优先，结果缓存到 `~/.config/caw/lyrics/<track-id>.lrc`
+  （首行 `[source:...]` 标记来源）；禁止在渲染或扫描线程发请求。
+- **在线封面**：无内嵌/缓存封面时后台拉取（网易云 → iTunes → MusicBrainz/CAA），缓存到
   `~/.config/caw/covers/<track-id>.jpg`；`get_or_save_cover` 必须先查缓存文件；每首每会话最多
   尝试一次，禁止在渲染或扫描线程发请求。
+- **指纹识别（可选）**：AcoustID 需用户在 config.json 配 `acoustid_client`；只在文本源全部
+  未命中时触发，解码前 120 秒算指纹，每首每会话至多一次；识别结果只用于匹配，不写回文件标签。
 - **标签写入**：只在后台 executor 执行（`tags::write` 原地重写，inode/权限不变）。写之前必须按
   默认 `ParseOptions` 解析（含封面），因为标签是从内存对象整体重编码的，跳过封面会丢掉内嵌封面；
   保留文件原有的 ID3v2 版本（2.3 仍写 2.3，无标签的 MP3 默认 2.3）。编辑完成后只刷新该曲目并重排，

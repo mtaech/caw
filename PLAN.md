@@ -672,3 +672,34 @@ Tauri v2 + Vue 3 + npm 已全部移除；仓库为单一 Rust crate。文档中�
 - 验证：真实 MP3（ID3v2.3 + 内嵌封面）改写后 ffprobe 字段正确、封面仍在、可正常解码；
   无标签 MP3 会新建 2.3 标签；FLAC 走 Vorbis Comments；清空字段会删除帧。
   `cargo fmt` / `cargo clippy --all-targets` / `cargo check --all-targets` 通过。
+
+### 歌曲信息补全：LRCLIB + MusicBrainz + AcoustID（2026-10-24）
+
+- 覆盖 2026-10-22「不引入 LRCLIB 等其它在线源」的决定：文本源越多，冷门曲/外文曲命中率越高。
+  新增三个源，全部只在后台 executor、只查当前曲目，遵守每首每会话一次的惯例。
+- **LRCLIB 歌词**（`src/lrclib.rs`）：免费免 key，`/api/get` 签名直查 + `/api/search`
+  打分搜索，返回 `trackName` 等 camelCase 字段；同步歌词优先、纯文本兜底，
+  `instrumental` 视为无歌词。排在网易云之后，作为欧美/日文曲目的补充。
+- **MusicBrainz 封面**（`src/covers/musicbrainz.rs`）：recording 搜索（Lucene
+  `recording:"…" AND artist:"…"`）→ 取 release-group → Cover Art Archive `front-600`。
+  MB 限 1 请求/秒且必须带 User-Agent，因此只花一次搜索请求；CAA 对部分 release-group
+  404，最多试 3 个候选，标题与本地专辑标签一致的排前面。
+- **AcoustID 指纹识别**（`src/acoustid.rs`，可选）：标签错误/缺失导致文本搜不到时，
+  解码前 120 秒（`decoder::decode_prefix`）→ rusty-chromaprint 纯 Rust 计算 TEST2 指纹
+  （与 fpcalc 默认一致）→ 压缩 + base64 → `api.acoustid.org/v2/lookup`。得分 ≥0.7 才采信；
+  用识别出的标题/歌手重试网易云与 LRCLIB，release-group MBID 直接取 CAA 封面。
+  需在 config.json 配 `acoustid_client`（在 acoustid.org 免费注册），空串即整体禁用。
+  识别结果只用于匹配，不写回文件标签。
+- 匹配打分统一：网易云原来的打分逻辑提取为 `netease::score_candidate`（标题/歌手/专辑/
+  时长），iTunes、LRCLIB、MusicBrainz 全部复用；时长缺失（≤0）不参与打分。
+- 缓存标记：`~/.config/caw/lyrics/<track-id>.lrc` 首行写入 `[source:netease|lrclib]`，
+  LRC 解析器会跳过该标签；读取时据此显示来源，旧缓存按网易云处理。
+- 设置页/播放页文案同步：在线获取（网易云 → LRCLIB）、（网易云 → iTunes → MusicBrainz）。
+- 验证：curl 实测 lrclib `/api/get`（Billie Jean 取到同步歌词）、`/api/search`（伍佰
+  《突然的自我》命中）、MB recording 搜索与 CAA front-600（Thriller 899KB JPEG）；
+  指纹链路用独立脚本验证（Billie Jean 120s → 948 词指纹 → base64 首字节 `AQADt…`
+  与 fpcalc 格式一致）；AcoustID 文档示例 client key 已失效，确认必须用户自备 key。
+  单测 33 项全过（LRCLIB 解析/打分、MB 解析、AcoustID 解析/MBID 校验、缓存标记、
+  score_candidate 迁移后原有用例不变）；`cargo fmt` / `cargo clippy --all-targets`（0 error）/
+  `cargo check --all-targets` 通过。
+

@@ -6,7 +6,7 @@ use std::time::Duration;
 use serde::Deserialize;
 
 use crate::models::track::Track;
-use crate::netease::{encode, is_image, match_artist, match_title, normalize, normalize_base};
+use crate::netease::{encode, is_image, match_artist, match_title};
 
 const SEARCH_URL: &str = "https://itunes.apple.com/search";
 const USER_AGENT: &str = concat!(
@@ -143,61 +143,13 @@ fn download(agent: &ureq::Agent, url: &str) -> anyhow::Result<Vec<u8>> {
 }
 
 fn score(item: &Item, track: &Track) -> i32 {
-    let wanted_title = normalize(&match_title(track));
-    let wanted_base = normalize_base(&match_title(track));
-    let title = normalize(&item.track_name);
-    let title_base = normalize_base(&item.track_name);
-
-    let mut score = if title == wanted_title {
-        100
-    } else if !wanted_base.is_empty() && title_base == wanted_base {
-        60
-    } else if !wanted_base.is_empty()
-        && !title_base.is_empty()
-        && (title_base.contains(&wanted_base) || wanted_base.contains(&title_base))
-    {
-        20
-    } else {
-        return i32::MIN;
-    };
-
-    if artist_matches(item, track) {
-        score += 60;
-    }
-
-    let album = normalize(track.display_album());
-    if !album.is_empty() && normalize(&item.collection_name) == album {
-        score += 15;
-    }
-
-    if let Some(ms) = item.track_time_millis {
-        let duration = ms as f64 / 1000.0;
-        let diff = (duration - track.duration.as_secs_f64()).abs();
-        score += if diff <= 1.0 {
-            40
-        } else if diff <= 2.0 {
-            35
-        } else if diff <= 5.0 {
-            15
-        } else if diff <= 10.0 {
-            -20
-        } else if diff <= 20.0 {
-            -80
-        } else {
-            -200
-        };
-    }
-
-    score
-}
-
-fn artist_matches(item: &Item, track: &Track) -> bool {
-    let wanted = normalize(&match_artist(track));
-    if wanted.is_empty() || wanted == "unknownartist" {
-        return false;
-    }
-    let name = normalize(&item.artist_name);
-    !name.is_empty() && (name == wanted || name.contains(&wanted) || wanted.contains(&name))
+    crate::netease::score_candidate(
+        &item.track_name,
+        &item.artist_name,
+        Some(&item.collection_name),
+        item.track_time_millis.map(|ms| ms as i64).unwrap_or(0),
+        track,
+    )
 }
 
 #[cfg(test)]

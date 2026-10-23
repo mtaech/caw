@@ -169,19 +169,18 @@ fn lyrics_section(app: &PlayerApp, cx: &mut Context<PlayerApp>) -> impl IntoElem
     };
 
     let online = app.config.fetch_lyrics_online;
-    let is_network = app
-        .lyrics
-        .as_ref()
-        .is_some_and(|lyrics| lyrics.source == LyricsSource::NetEase);
+    let is_network = app.lyrics.as_ref().is_some_and(|lyrics| {
+        matches!(lyrics.source, LyricsSource::NetEase | LyricsSource::LrcLib)
+    });
     let loading_detail = if online {
-        "本地没有时会尝试网易云，结果会缓存"
+        "本地没有时会尝试网易云 / LRCLIB，结果会缓存"
     } else {
         "支持同名 .lrc 文件与音频内嵌歌词"
     };
     let empty_detail = if online {
-        "本地没有歌词，联网也没有匹配结果（或网络不可用）。可点刷新重试，或放入同名 .lrc。"
+        "本地没有歌词，网易云和 LRCLIB 都没有匹配（或网络不可用）。可点刷新重试，或放入同名 .lrc。"
     } else {
-        "已关闭在线歌词。可在「设置 → 歌词」中开启网易云，或放入同名 .lrc。"
+        "已关闭在线歌词。可在「设置 → 歌词」中开启在线获取，或放入同名 .lrc。"
     };
 
     let body: AnyElement = if app.lyrics_loading {
@@ -231,7 +230,7 @@ fn lyrics_section(app: &PlayerApp, cx: &mut Context<PlayerApp>) -> impl IntoElem
                                         .ghost()
                                         .xsmall()
                                         .icon(CawIcon::Refresh)
-                                        .tooltip("重新从网易云获取")
+                                        .tooltip("重新在线获取")
                                         .on_click(move |_, _, cx| {
                                             ent.update(cx, |this, cx| {
                                                 this.refresh_lyrics(cx);

@@ -182,7 +182,7 @@ pub(super) fn render_settings(
                 .bg(theme.secondary)
                 .child(section(
                     "歌词",
-                    "本地没有 .lrc 或内嵌歌词时，从网易云搜索并缓存到 ~/.config/caw/lyrics/",
+                    "本地没有 .lrc 或内嵌歌词时，从网易云、LRCLIB 搜索并缓存到 ~/.config/caw/lyrics/。标签错误时可在 config.json 配置 acoustid_client 启用 AcoustID 指纹识别辅助匹配",
                 ))
                 .child(
                     h_flex()
@@ -191,7 +191,7 @@ pub(super) fn render_settings(
                             let ent = entity.clone();
                             choice_button(
                                 "btn-lyrics-online-on",
-                                "在线获取（网易云）",
+                                "在线获取（网易云 → LRCLIB）",
                                 app.config.fetch_lyrics_online,
                             )
                             .on_click(move |_, _, cx| {
@@ -226,7 +226,7 @@ pub(super) fn render_settings(
                 .bg(theme.secondary)
                 .child(section(
                     "封面",
-                    "无内嵌封面时在线获取，缓存到 ~/.config/caw/covers/；网易云优先，iTunes 备选",
+                    "无内嵌封面时在线获取，缓存到 ~/.config/caw/covers/；网易云优先，iTunes / MusicBrainz 备选",
                 ))
                 .child(
                     h_flex()
@@ -235,7 +235,7 @@ pub(super) fn render_settings(
                             let ent = entity.clone();
                             choice_button(
                                 "btn-covers-online-on",
-                                "在线获取（网易云 → iTunes）",
+                                "在线获取（网易云 → iTunes → MusicBrainz）",
                                 app.config.fetch_covers_online,
                             )
                             .on_click(move |_, _, cx| {

@@ -1,9 +1,11 @@
-//! Lyrics loading: sidecar `.lrc` files, embedded audio tags, and NetEase.
+//! Lyrics loading: sidecar `.lrc` files, embedded audio tags, and online
+//! providers (NetEase, then LRCLIB; an optional AcoustID fingerprint lookup
+//! assists both when the tags themselves are wrong).
 //!
 //! Lyrics are loaded lazily for the current track (never during the library
 //! scan), so a large collection pays no memory cost for text it does not show.
 //! Local sources win (sidecar, then embedded tag), then a cached online result,
-//! then a live NetEase search. Every source goes through the same LRC parser,
+//! then a live provider search. Every source goes through the same LRC parser,
 //! which also accepts plain-text lyrics.
 
 use std::path::Path;
@@ -28,6 +30,8 @@ pub enum LyricsSource {
     Embedded,
     /// NetEase search result, either live or from the local cache.
     NetEase,
+    /// LRCLIB search result, either live or from the local cache.
+    LrcLib,
 }
 
 impl LyricsSource {
@@ -36,6 +40,7 @@ impl LyricsSource {
             Self::Sidecar => "本地 .lrc 歌词",
             Self::Embedded => "内嵌歌词",
             Self::NetEase => "网易云歌词",
+            Self::LrcLib => "LRCLIB歌词",
         }
     }
 }
@@ -69,10 +74,11 @@ impl Lyrics {
 
 /// Read lyrics for `track`.
 ///
-/// Order: sidecar `.lrc` -> embedded tag -> cached online result -> NetEase.
-/// `online` only controls the live search; a cached result is local data and
-/// keeps working with the setting disabled.
-pub fn load(track: &Track, online: bool) -> Option<Lyrics> {
+/// Order: sidecar `.lrc` -> embedded tag -> cached online result -> live
+/// search. `online` only controls the live search; a cached result is local
+/// data and keeps working with the setting disabled. `acoustid_client`
+/// enables the fingerprint-assisted retry for mis-tagged files.
+pub fn load(track: &Track, online: bool, acoustid_client: &str) -> Option<Lyrics> {
     if let Some(text) = read_sidecar(&track.path)
         && let Some(lyrics) = parse(&text, LyricsSource::Sidecar)
     {
@@ -85,8 +91,8 @@ pub fn load(track: &Track, online: bool) -> Option<Lyrics> {
         return Some(lyrics);
     }
 
-    if let Some(text) = read_cache(track.id)
-        && let Some(lyrics) = parse(&text, LyricsSource::NetEase)
+    if let Some((source, text)) = read_cache(track.id)
+        && let Some(lyrics) = parse(&text, source)
     {
         return Some(lyrics);
     }
@@ -95,25 +101,85 @@ pub fn load(track: &Track, online: bool) -> Option<Lyrics> {
         return None;
     }
 
-    let text = crate::netease::fetch_lyrics(track)?;
-    let lyrics = parse(&text, LyricsSource::NetEase)?;
-    write_cache(track.id, &text);
+    let (source, text) = fetch_online(track, acoustid_client)?;
+    let lyrics = parse(&text, source)?;
+    write_cache(track.id, source, &text);
     Some(lyrics)
 }
 
-/// Read a previously fetched online lyric file.
-fn read_cache(track_id: u64) -> Option<String> {
-    let path = crate::paths::lyrics_cache_path(track_id);
-    let bytes = std::fs::read(path).ok()?;
-    decode_text(&bytes)
+/// Live provider chain: NetEase first (strongest for Chinese catalogs), then
+/// LRCLIB. When both miss and a client key is configured, AcoustID identifies
+/// the recording from audio and the chain retries with the corrected metadata.
+fn fetch_online(track: &Track, acoustid_client: &str) -> Option<(LyricsSource, String)> {
+    if let Some(text) = crate::netease::fetch_lyrics(track) {
+        return Some((LyricsSource::NetEase, text));
+    }
+    if let Some(text) = crate::lrclib::fetch_lyrics(track) {
+        return Some((LyricsSource::LrcLib, text));
+    }
+
+    let identified = crate::acoustid::identify(track, acoustid_client)?;
+    crate::log_info!(
+        "acoustid identified '{}' by {} — retrying lyrics with corrected metadata",
+        identified.title,
+        identified.artist
+    );
+    let corrected = Track {
+        title: identified.title.clone(),
+        artist: identified.artist.clone(),
+        ..track.clone()
+    };
+    if let Some(text) = crate::netease::fetch_lyrics(&corrected) {
+        return Some((LyricsSource::NetEase, text));
+    }
+    if let Some(text) = crate::lrclib::fetch_lyrics(&corrected) {
+        return Some((LyricsSource::LrcLib, text));
+    }
+    None
 }
 
-/// Persist a network result so the next play works offline.
-fn write_cache(track_id: u64, text: &str) {
+/// Read a previously fetched online lyric file together with its origin.
+fn read_cache(track_id: u64) -> Option<(LyricsSource, String)> {
     let path = crate::paths::lyrics_cache_path(track_id);
-    if let Err(err) = std::fs::write(&path, text) {
+    let bytes = std::fs::read(path).ok()?;
+    let text = decode_text(&bytes)?;
+    Some(split_cache_marker(&text))
+}
+
+/// Persist a network result so the next play works offline. A first-line
+/// `[source:...]` marker keeps the origin label correct after a restart.
+fn write_cache(track_id: u64, source: LyricsSource, text: &str) {
+    let path = crate::paths::lyrics_cache_path(track_id);
+    let marked = format!("{}\n{}", source_marker(source), text);
+    if let Err(err) = std::fs::write(&path, marked) {
         crate::log_warn!("failed to cache lyrics at {}: {}", path.display(), err);
     }
+}
+
+/// First-line marker tag for a source. The LRC parser skips `[key:value]`
+/// tags, so the marker never reaches the screen.
+fn source_marker(source: LyricsSource) -> &'static str {
+    match source {
+        LyricsSource::NetEase => "[source:netease]",
+        LyricsSource::LrcLib => "[source:lrclib]",
+        LyricsSource::Sidecar | LyricsSource::Embedded => "",
+    }
+}
+
+/// Split a leading `[source:...]` marker; caches written before the marker
+/// existed are NetEase results.
+fn split_cache_marker(text: &str) -> (LyricsSource, String) {
+    if let Some((first, rest)) = text.split_once('\n') {
+        let source = match first.trim() {
+            "[source:lrclib]" => Some(LyricsSource::LrcLib),
+            "[source:netease]" => Some(LyricsSource::NetEase),
+            _ => None,
+        };
+        if let Some(source) = source {
+            return (source, rest.to_string());
+        }
+    }
+    (LyricsSource::NetEase, text.to_string())
 }
 
 /// Parse LRC or plain-text lyrics.
@@ -340,5 +406,24 @@ mod tests {
         .expect("lyrics");
         assert_eq!(lyrics.lines.len(), 2);
         assert_eq!(lyrics.active_line(Duration::from_millis(2500)), Some(0));
+    }
+
+    #[test]
+    fn cache_marker_selects_the_source_and_is_stripped() {
+        let (source, text) = split_cache_marker("[source:lrclib]\n[00:01.00]hello\n");
+        assert_eq!(source, LyricsSource::LrcLib);
+        assert_eq!(text, "[00:01.00]hello\n");
+        assert_eq!(parse(&text, source).expect("lyrics").lines[0].text, "hello");
+
+        let (source, text) = split_cache_marker("[source:netease]\nplain\n");
+        assert_eq!(source, LyricsSource::NetEase);
+        assert_eq!(text, "plain\n");
+    }
+
+    #[test]
+    fn unmarked_caches_default_to_netease() {
+        let (source, text) = split_cache_marker("[00:01.00]legacy\n");
+        assert_eq!(source, LyricsSource::NetEase);
+        assert_eq!(text, "[00:01.00]legacy\n");
     }
 }

@@ -162,6 +162,10 @@ pub struct PlayerApp {
     pub lyrics_scroll_handle: ScrollHandle,
     /// Last active line the lyrics column auto-scrolled to.
     lyrics_scrolled_line: Option<usize>,
+    /// Until this instant, position-based highlight updates are skipped, so a
+    /// click-seek landing shortly before a line does not flash the previous
+    /// one (see `play_lyric_line`).
+    lyrics_lock_until: Option<Instant>,
     /// Tracks already looked up for online cover art this session.
     cover_attempts: std::collections::HashSet<u64>,
 
@@ -356,6 +360,7 @@ impl PlayerApp {
             lyrics_active_line: None,
             lyrics_scroll_handle: ScrollHandle::new(),
             lyrics_scrolled_line: None,
+            lyrics_lock_until: None,
             cover_attempts: std::collections::HashSet::new(),
             create_playlist_input: None,
             add_to_playlist_track: None,
@@ -1067,10 +1072,11 @@ impl PlayerApp {
         let track_id = track.id;
         let path = crate::paths::cover_path(track_id);
         let track_for_fetch = track.clone();
+        let acoustid_client = self.config.acoustid_client.clone();
         cx.spawn(async move |entity, cx| {
             let bytes = cx
                 .background_executor()
-                .spawn(async move { crate::covers::fetch(&track_for_fetch) })
+                .spawn(async move { crate::covers::fetch(&track_for_fetch, &acoustid_client) })
                 .await;
             let Some(bytes) = bytes else {
                 crate::log_debug!("no online cover found for track {}", track_id);
@@ -1117,6 +1123,7 @@ impl PlayerApp {
             self.lyrics_track_id = None;
             self.lyrics_loading = false;
             self.lyrics_active_line = None;
+            self.lyrics_lock_until = None;
             self.lyrics_scrolled_line = None;
             return;
         };
@@ -1132,13 +1139,15 @@ impl PlayerApp {
         self.lyrics_track_id = Some(track_id);
         self.lyrics_loading = true;
         self.lyrics_active_line = None;
+        self.lyrics_lock_until = None;
         self.lyrics_scrolled_line = None;
         let online = self.config.fetch_lyrics_online;
+        let acoustid_client = self.config.acoustid_client.clone();
 
         cx.spawn(async move |entity, cx| {
             let loaded = cx
                 .background_executor()
-                .spawn(async move { crate::lyrics::load(&track, online) })
+                .spawn(async move { crate::lyrics::load(&track, online, &acoustid_client) })
                 .await;
 
             let _ = entity.update(cx, |this, cx| {
@@ -1148,6 +1157,7 @@ impl PlayerApp {
                 this.lyrics_loading = false;
                 this.lyrics = loaded.map(Arc::new);
                 this.lyrics_active_line = None;
+                this.lyrics_lock_until = None;
                 this.lyrics_scrolled_line = None;
                 if let Some(lyrics) = this.lyrics.as_ref() {
                     crate::log_info!(
@@ -1169,6 +1179,16 @@ impl PlayerApp {
 
     /// Recompute the highlighted lyric line from the playback position.
     fn sync_lyrics_line(&mut self, cx: &mut Context<Self>) {
+        // A click-seek starts shortly before the target line; keep that line
+        // highlighted until playback reaches it instead of flashing the
+        // previous one (see `play_lyric_line`).
+        if let Some(until) = self.lyrics_lock_until
+            && Instant::now() < until
+        {
+            return;
+        }
+        self.lyrics_lock_until = None;
+
         let position = duration_from_secs(self.position);
         let next = self
             .lyrics
@@ -1227,7 +1247,7 @@ impl PlayerApp {
         true
     }
 
-    /// Drop the cached NetEase result and look the current track up again.
+    /// Drop the cached online result and look the current track up again.
     pub fn refresh_lyrics(&mut self, cx: &mut Context<Self>) {
         let Some(track) = self.current_track.clone() else {
             return;
@@ -1260,12 +1280,21 @@ impl PlayerApp {
             return;
         }
 
+        // Start slightly before the clicked line so the seek lands just ahead
+        // of the phrase instead of jumping in mid-word. The rolled-back
+        // position sits in the previous line's window, so keep the clicked
+        // line highlighted until playback reaches it.
+        const CLICK_LEAD_SECS: f64 = 0.2;
+        const CLICK_LOCK: Duration = Duration::from_millis(800);
+        let seconds = (seconds - CLICK_LEAD_SECS).max(0.0);
+        self.lyrics_lock_until = Some(Instant::now() + CLICK_LOCK);
+
         if self.playback_state == PlaybackState::Stopped {
             self.play_current_queue_from(seconds, cx);
         } else {
             self.seek_to(seconds, cx);
         }
-        self.sync_lyrics_line(cx);
+        self.lyrics_active_line = Some(index);
         self.lyrics_scrolled_line = None;
         self.follow_lyrics(cx);
     }

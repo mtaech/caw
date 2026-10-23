@@ -391,39 +391,71 @@ fn request(agent: &ureq::Agent, url: &str) -> anyhow::Result<String> {
 ///
 /// Exact title beats a base title match; duration is the strongest guard
 /// against picking a live/remix/cover version. A hit with a mismatched artist
-/// needs a near-exact duration to pass `MIN_SCORE`.
+/// needs a near-exact duration to pass `MIN_SCORE`. With several artists the
+/// best-matching one counts.
 fn score(song: &Song, track: &Track) -> i32 {
+    let album = song.album.as_ref().map(|album| album.name.as_str());
+    let mut best = if song.artists.is_empty() {
+        score_candidate(&song.name, "", album, song.duration, track)
+    } else {
+        i32::MIN
+    };
+    for artist in &song.artists {
+        best = best.max(score_candidate(
+            &song.name,
+            &artist.name,
+            album,
+            song.duration,
+            track,
+        ));
+    }
+    best
+}
+
+/// Score one (title, artist, album, duration) candidate against `track`.
+///
+/// Shared by every online provider so their candidates rank consistently.
+/// Returns `i32::MIN` when the title cannot be a match at all.
+pub(crate) fn score_candidate(
+    title: &str,
+    artist: &str,
+    album: Option<&str>,
+    duration_ms: i64,
+    track: &Track,
+) -> i32 {
     let wanted_title = normalize(&match_title(track));
     let wanted_base = normalize_base(&match_title(track));
-    let title = normalize(&song.name);
-    let title_base = normalize_base(&song.name);
+    let candidate_title = normalize(title);
+    let candidate_base = normalize_base(title);
 
-    let mut score = if title == wanted_title {
+    let mut score = if candidate_title == wanted_title {
         100
-    } else if !wanted_base.is_empty() && title_base == wanted_base {
+    } else if !wanted_base.is_empty() && candidate_base == wanted_base {
         60
     } else if !wanted_base.is_empty()
-        && !title_base.is_empty()
-        && (title_base.contains(&wanted_base) || wanted_base.contains(&title_base))
+        && !candidate_base.is_empty()
+        && (candidate_base.contains(&wanted_base) || wanted_base.contains(&candidate_base))
     {
         20
     } else {
         return i32::MIN;
     };
 
-    if artist_matches(song, track) {
+    if artist_matches_name(artist, track) {
         score += 60;
     }
 
-    if let Some(album) = &song.album {
+    if let Some(album) = album {
         let wanted_album = normalize(track.display_album());
-        if !wanted_album.is_empty() && normalize(&album.name) == wanted_album {
+        if !wanted_album.is_empty() && normalize(album) == wanted_album {
             score += 15;
         }
     }
 
-    if !track.duration.is_zero() {
-        let diff = (song.duration as f64 / 1000.0 - track.duration.as_secs_f64()).abs();
+    // A missing duration carries no information; a present one guards against
+    // live/remix/cover versions.
+    if duration_ms > 0 && !track.duration.is_zero() {
+        let diff = (duration_ms as f64 / 1000.0 - track.duration.as_secs_f64()).abs();
         score += if diff <= 1.0 {
             40
         } else if diff <= 2.0 {
@@ -442,15 +474,13 @@ fn score(song: &Song, track: &Track) -> i32 {
     score
 }
 
-fn artist_matches(song: &Song, track: &Track) -> bool {
+fn artist_matches_name(artist: &str, track: &Track) -> bool {
     let wanted = normalize(&match_artist(track));
     if wanted.is_empty() || wanted == "unknownartist" {
         return false;
     }
-    song.artists.iter().any(|artist| {
-        let name = normalize(&artist.name);
-        !name.is_empty() && (name == wanted || name.contains(&wanted) || wanted.contains(&name))
-    })
+    let name = normalize(artist);
+    !name.is_empty() && (name == wanted || name.contains(&wanted) || wanted.contains(&name))
 }
 
 /// Lowercase and keep only letters/digits, so punctuation and spacing from

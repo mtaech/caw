@@ -1,12 +1,14 @@
 #[macro_use]
 mod logging;
 
+mod acoustid;
 mod app;
 mod assets;
 mod audio;
 mod config;
 mod covers;
 mod db;
+mod lrclib;
 mod lyrics;
 mod models;
 mod netease;

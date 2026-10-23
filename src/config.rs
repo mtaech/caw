@@ -64,8 +64,12 @@ pub struct AppConfig {
     pub close_to_tray: bool,
     /// Fetch lyrics from NetEase when the file has no local lyrics.
     pub fetch_lyrics_online: bool,
-    /// Fetch missing cover art online (NetEase, then iTunes).
+    /// Fetch missing cover art online (NetEase, then iTunes, then MusicBrainz).
     pub fetch_covers_online: bool,
+    /// AcoustID application client key. Empty (the default) disables the
+    /// fingerprint-assisted lookups for mis-tagged files; a personal key can
+    /// be registered at https://acoustid.org/new-application and pasted here.
+    pub acoustid_client: String,
     /// Last window geometry, restored on startup when present.
     pub window_bounds: Option<WindowBounds>,
     /// Unix timestamp (seconds) of the last completed library scan.
@@ -100,6 +104,8 @@ impl Default for AppConfig {
             // still be turned off for offline-only use.
             fetch_lyrics_online: true,
             fetch_covers_online: true,
+            // Fingerprint assist stays off until the user registers a key.
+            acoustid_client: String::new(),
             window_bounds: None,
             last_scan_time: None,
             last_track_path: None,
@@ -222,6 +228,7 @@ mod tests {
             close_to_tray: true,
             fetch_lyrics_online: false,
             fetch_covers_online: false,
+            acoustid_client: "test-key".to_string(),
             window_bounds: Some(WindowBounds {
                 x: 10.0,
                 y: 20.0,

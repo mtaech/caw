@@ -23,6 +23,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 crossbeam-channel = "0.5"
 # Online lyrics (NetEase): small blocking client, used on the background executor
 ureq = "3"
+
+# AcoustID fingerprinting for mis-tagged files: pure-Rust chromaprint port
+rusty-chromaprint = "0.3"
+base64 = "0.23"
 walkdir = "2"
 dirs = "5"
 image = "0.25"

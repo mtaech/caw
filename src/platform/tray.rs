@@ -214,14 +214,17 @@ fn now_playing_label(snapshot: &NowPlaying) -> String {
     if !snapshot.has_track() {
         return "未在播放".to_owned();
     }
-    let mut label = snapshot.title.clone();
+    // Two-line header keeps the menu narrow for long titles. Qt menus honor
+    // a newline in action text, and Breeze renders it correctly since
+    // Plasma 6.0 (KDE bug 477299).
+    let mut track = snapshot.title.clone();
     if !snapshot.artist.is_empty() {
-        label.push_str(" — ");
-        label.push_str(&snapshot.artist);
+        track.push_str(" — ");
+        track.push_str(&snapshot.artist);
     }
     format!(
-        "{}   {} / {}",
-        label,
+        "{}\n{} / {}",
+        track,
         fmt_time(snapshot.position_secs),
         fmt_time(snapshot.duration_secs)
     )
